@@ -108,6 +108,7 @@
   .hint-hr{display:block;color:#8a6a3a;font-size:11px;margin-top:3px}
   .file-line{border:1px solid var(--line);border-left:4px solid var(--warn);border-radius:0 4px 4px 0;background:#fbf9f3;padding:10px 14px;margin:6px 0;font-family:var(--mono);font-size:12px;word-break:break-all}
   .file-line.ok{border-left-color:var(--ok)}
+  .file-line.sev{border-left-color:var(--err)}
   .file-line .st{font-size:11px;color:#6b7480}
   .kbrow{border:1px solid var(--line);border-radius:4px;background:#fbf9f3;padding:10px 14px;margin:6px 0;font-family:var(--mono);font-size:12px;display:flex;gap:12px;flex-wrap:wrap;align-items:center}
   .kbrow .kb{font-weight:600}
@@ -132,6 +133,15 @@
   .obs{border:1px solid var(--line);border-left:5px solid var(--steel);border-radius:0 4px 4px 0;background:#f4f7fa;padding:13px 18px;margin:9px 0}
   .obs h4{margin:0 0 3px;font-size:15px;color:var(--steel-d)}
   .obs p{margin:0;font-size:13px;color:#46505c}
+
+  .dismrow{border:1px solid var(--line);border-radius:4px;background:#fbf9f3;padding:10px 14px;margin:6px 0;font-family:var(--mono);font-size:12px;word-break:break-all}
+  .dismrow.fail{border-left:4px solid var(--err)}
+  .dismrow.okk{border-left:4px solid var(--ok)}
+  .dismrow .hint-hr{color:#8a6a3a}
+
+  .surrow{border:1px solid var(--line);border-left:4px solid var(--err);border-radius:0 4px 4px 0;background:#fbf9f3;padding:9px 14px;margin:5px 0;font-family:var(--mono);font-size:12px;word-break:break-all}
+  .surrow .tp{font-size:10px;letter-spacing:.06em;text-transform:uppercase;background:var(--chip);border-radius:3px;padding:1px 6px;color:#6b7480;margin-right:8px}
+  .surrow .nt{display:block;font-size:11px;color:#8a6a3a;margin-top:3px}
 </style>
 </head>
 <body>
@@ -161,6 +171,8 @@
 
   <section id="sec-cause"><h3 data-i18n="h_cause"></h3><div id="cause"></div></section>
   <section id="sec-obs"><h3 data-i18n="h_obs"></h3><div id="obs"></div></section>
+  <section id="sec-dism"><h3 data-i18n="h_dism"></h3><div id="dism"></div></section>
+  <section id="sec-sur"><h3 data-i18n="h_sur"></h3><div id="sur"></div></section>
   <section id="sec-comp"><h3 data-i18n="h_comp"></h3><div id="comp"></div></section>
   <section id="sec-files"><h3 data-i18n="h_files"></h3><div id="files"></div></section>
   <section id="sec-kb"><h3 data-i18n="h_kb"></h3><div id="kb"></div></section>
@@ -213,7 +225,7 @@ const I18N = {
     st_lines:'строк', st_comps:'компонентов',
     comp_meta:(c,cat,lv,t)=>`упоминаний: <b>${c}</b> · категория: <b>${cat}</b> · уровень: <b>${lv}</b> · ${t}`,
     comp_none:'Повреждённых компонентов не найдено.',
-    file_lbl:{cannot:'не удалось починить',hashmismatch:'хэш не совпал',repaired:'починен'},
+    file_lbl:{cannot:'не удалось починить',hashmismatch:'хэш не совпал',repaired:'починен',store_corrupt:'источник в хранилище тоже повреждён'},
     files_none:'Событий починки файлов не найдено.',
     kb_noerr:'без ошибок', kb_none:'Упоминаний обновлений не найдено.',
     cmd_none:'Починка не требуется.',
@@ -241,11 +253,23 @@ const I18N = {
       '0x80073701':'ERROR_SXS_ASSEMBLY_MISSING — отсутствует сборка компонента.',
       '0x80070002':'ERROR_FILE_NOT_FOUND — файл/ключ не найден (часто безобидно).',
       '0x80070003':'ERROR_PATH_NOT_FOUND — путь не найден (часто offline-обслуживание по несуществующему диску/образу).',
+      '0x80071160':'CBS_E_SOURCE_MISSING — DISM не нашёл исправные файлы для починки (онлайн-источник недоступен/не отдаёт нужное). Нужен /Source из ISO той же сборки.',
+      '0x800f0906':'CBS не смог скачать файлы источника (нет связи с WU/ограничена политика). Используйте /Source + /LimitAccess.',
       '0x8007000d':'ERROR_INVALID_DATA — некорректные данные (нередко косметика, напр. сбой таймера).',
       '0x80004005':'E_FAIL — общая ошибка; смотрите соседние строки для причины.',
       '0x800f0831':'CBS не нашёл нужный пакет в хранилище для применения обновления.'
     },
     h_obs:'Наблюдения (не ошибки целостности)',
+    h_dism:'Запуски DISM',
+    h_sur:'CheckSUR / повреждённые пакеты',
+    sur_none:'Повреждённых пакетов (CheckSUR) не найдено.',
+    sur_summary:(n,res)=>`Повреждённых пакетов: <b>${n}</b>${res?` · результат операции: <b>${res}</b>`:''}.`,
+    sur_break:(parts)=>parts.join(' · '),
+    sur_repfail:'замена mum/cat отсутствует',
+    dism_none:'Запусков DISM в логе не найдено.',
+    dism_attempt:(cmd,res,t)=>`<b>${cmd}</b> · ${res} · ${t}`,
+    dism_ok:'успех', dism_fail:c=>`сбой ${c}`,
+    dism_summary:(n,f)=>`Найдено запусков DISM: <b>${n}</b>, из них со сбоем: <b>${f}</b>.`,
     obs_none:'Особых наблюдений нет.',
     observations:{
       offline_path:{ label:'Offline-обслуживание: путь недоступен',
@@ -256,6 +280,10 @@ const I18N = {
         text:'Выполнялась очистка суперседированных компонентов (StartComponentCleanup / ResetBase). Это штатное обслуживание, уменьшающее WinSxS; откат к старым версиям обновлений после этого недоступен.' },
       pending_reboot:{ label:'Ожидается перезагрузка',
         text:'Есть отложенные операции, требующие перезагрузки (pending.xml / poqexec). Часть обслуживания завершится только после рестарта.' },
+      store_source_corrupt:{ label:'Источник восстановления в хранилище повреждён',
+        text:'Для части файлов эталон в самом хранилище компонентов (WinSxS) тоже повреждён — sfc /scannow чинить нечем, поэтому он показывает «починено 0». Нужен DISM /Online /Cleanup-Image /RestoreHealth (дотянет здоровые файлы из Windows Update), затем повторный sfc /scannow. Если онлайн не поможет — /Source из ISO ровно той же сборки.' },
+      no_mumcat:{ label:'CheckSUR: нет замены mum/cat',
+        text:'Повреждены манифесты пакетов (.mum/.cat), и у CBS нет локальной замены («Missing replacement mum/cat pair»). Онлайн-починка такие пакеты восстановить не может — нужен офлайн-источник (смонтированный ISO той же сборки) или ручная подстановка mum/cat из исправной системы той же версии. Чаще всего затронуты языковые/опциональные компоненты, не влияющие на работу системы.' },
     },
     causes:{
       spp_tokens:{ label:'Повреждены токены лицензирования (SPP)',
@@ -279,6 +307,11 @@ const I18N = {
         fix:[['Восстановить хранилище','DISM /Online /Cleanup-Image /RestoreHealth'],
              ['Сбросить очередь Windows Update','net stop wuauserv & net stop bits & ren %windir%\\SoftwareDistribution SD.old & net start wuauserv & net start bits'],
              ['Проверка системных файлов','sfc /scannow']] },
+      dism_source_missing:{ label:'DISM: онлайн-источник недоступен (0x80071160)',
+        why:'DISM /RestoreHealth завершился с 0x80071160 (CBS_E_SOURCE_MISSING) — онлайн-починка не нашла исправные файлы. Повторять онлайн бессмысленно. Нужен явный источник из ISO ровно той же сборки и языка, с /LimitAccess (чтобы DISM не ходил в Windows Update).',
+        fix:[['Смонтировать ISO той же сборки, указать источник и запретить WU','DISM /Online /Cleanup-Image /RestoreHealth /Source:WIM:X:\\sources\\install.wim:1 /LimitAccess'],
+             ['Если в ISO образ в формате ESD','DISM /Online /Cleanup-Image /RestoreHealth /Source:ESD:X:\\sources\\install.esd:1 /LimitAccess'],
+             ['После восстановления — повторная проверка','sfc /scannow']] },
     }
   },
   en:{
@@ -308,7 +341,7 @@ const I18N = {
     st_lines:'lines', st_comps:'components',
     comp_meta:(c,cat,lv,t)=>`mentions: <b>${c}</b> · category: <b>${cat}</b> · level: <b>${lv}</b> · ${t}`,
     comp_none:'No corrupt components found.',
-    file_lbl:{cannot:'could not repair',hashmismatch:'hash mismatch',repaired:'repaired'},
+    file_lbl:{cannot:'could not repair',hashmismatch:'hash mismatch',repaired:'repaired',store_corrupt:'source in store is also corrupt'},
     files_none:'No file-repair events found.',
     kb_noerr:'no errors', kb_none:'No update references found.',
     cmd_none:'No repair needed.',
@@ -336,11 +369,23 @@ const I18N = {
       '0x80073701':'ERROR_SXS_ASSEMBLY_MISSING — a component assembly is missing.',
       '0x80070002':'ERROR_FILE_NOT_FOUND — file/key not found (often harmless).',
       '0x80070003':'ERROR_PATH_NOT_FOUND — path not found (often offline servicing against a missing drive/image).',
+      '0x80071160':'CBS_E_SOURCE_MISSING — DISM could not find healthy files to repair from (online source unavailable/not serving them). Needs /Source from an ISO of the same build.',
+      '0x800f0906':'CBS could not download source files (no WU connectivity / policy-restricted). Use /Source + /LimitAccess.',
       '0x8007000d':'ERROR_INVALID_DATA — invalid data (often cosmetic, e.g. a timer glitch).',
       '0x80004005':'E_FAIL — generic error; check nearby lines for the cause.',
       '0x800f0831':'CBS could not find the required package in the store to apply the update.'
     },
     h_obs:'Observations (not integrity errors)',
+    h_dism:'DISM runs',
+    h_sur:'CheckSUR / corrupt packages',
+    sur_none:'No corrupt packages (CheckSUR) found.',
+    sur_summary:(n,res)=>`Corrupt packages: <b>${n}</b>${res?` · operation result: <b>${res}</b>`:''}.`,
+    sur_break:(parts)=>parts.join(' · '),
+    sur_repfail:'no mum/cat replacement available',
+    dism_none:'No DISM runs found in the log.',
+    dism_attempt:(cmd,res,t)=>`<b>${cmd}</b> · ${res} · ${t}`,
+    dism_ok:'success', dism_fail:c=>`failed ${c}`,
+    dism_summary:(n,f)=>`DISM runs found: <b>${n}</b>, of which failed: <b>${f}</b>.`,
     obs_none:'No notable observations.',
     observations:{
       offline_path:{ label:'Offline servicing: path unavailable',
@@ -351,6 +396,10 @@ const I18N = {
         text:'Superseded components were cleaned up (StartComponentCleanup / ResetBase). This is routine maintenance that shrinks WinSxS; rolling back to older update versions is no longer possible afterwards.' },
       pending_reboot:{ label:'Reboot pending',
         text:'There are deferred operations that require a restart (pending.xml / poqexec). Part of the servicing will only complete after a reboot.' },
+      store_source_corrupt:{ label:'Repair source in the store is corrupt',
+        text:'For some files the reference copy in the component store (WinSxS) is corrupt too — sfc /scannow has nothing to repair from, which is why it reports "repaired 0". Run DISM /Online /Cleanup-Image /RestoreHealth (it pulls healthy files from Windows Update), then sfc /scannow again. If online fails, use /Source from an ISO of the exact same build.' },
+      no_mumcat:{ label:'CheckSUR: no mum/cat replacement',
+        text:'Package manifests (.mum/.cat) are corrupt and CBS has no local replacement ("Missing replacement mum/cat pair"). Online repair cannot restore these packages — you need an offline source (a mounted ISO of the same build) or to manually drop in mum/cat files from a healthy machine of the same version. Usually the affected items are language/optional components that do not affect system operation.' },
     },
     causes:{
       spp_tokens:{ label:'Corrupt licensing tokens (SPP)',
@@ -374,6 +423,11 @@ const I18N = {
         fix:[['Restore the store','DISM /Online /Cleanup-Image /RestoreHealth'],
              ['Reset the Windows Update queue','net stop wuauserv & net stop bits & ren %windir%\\SoftwareDistribution SD.old & net start wuauserv & net start bits'],
              ['Check system files','sfc /scannow']] },
+      dism_source_missing:{ label:'DISM: online source unavailable (0x80071160)',
+        why:'DISM /RestoreHealth failed with 0x80071160 (CBS_E_SOURCE_MISSING) — the online repair found no healthy files. Retrying online is pointless. You need an explicit source from an ISO of the exact same build and language, with /LimitAccess (so DISM does not go to Windows Update).',
+        fix:[['Mount an ISO of the same build, point to the source and block WU','DISM /Online /Cleanup-Image /RestoreHealth /Source:WIM:X:\\sources\\install.wim:1 /LimitAccess'],
+             ['If the ISO ships an ESD image','DISM /Online /Cleanup-Image /RestoreHealth /Source:ESD:X:\\sources\\install.esd:1 /LimitAccess'],
+             ['After repair — re-check','sfc /scannow']] },
     }
   }
 };
@@ -390,7 +444,7 @@ function applyStatic(){
 function setLang(l){
   LANG=l; T=I18N[l]; try{ localStorage.setItem('cbsLang',l); }catch(e){}
   applyStatic();
-  if(window._D){ window._D.op=detectOp(window._D._text); window._D.causes=runCauses(window._D._text); window._D.obs=runObs(window._D._text); render(window._D); }
+  if(window._D){ window._D.op=detectOp(window._D._text); window._D.causes=runCauses(window._D._text); window._D.obs=runObs(window._D._text); window._D.dism=parseDism(window._D._text); window._D.sur=parseSUR(window._D._text); render(window._D); }
 }
 $('#lng-ru').addEventListener('click',()=>setLang('ru'));
 $('#lng-en').addEventListener('click',()=>setLang('en'));
@@ -446,6 +500,7 @@ const CAUSE_TESTS = [
   {id:'store_corruption', test:t=>/mark store corrupt|Store corruption detected|CorruptManifest|Cannot repair member file|Total Detected Corruption:\s*[1-9]/i.test(t), notStore:false},
   {id:'missing_source', test:t=>/0x800f081f|CBS_E_SOURCE_MISSING|cannot find the source files/i.test(t), notStore:false},
   {id:'update_install_fail', test:t=>/0x80073712|0x800f0922|0x80073701|ERROR_SXS_ASSEMBLY_MISSING/i.test(t), notStore:false},
+  {id:'dism_source_missing', test:t=>/0x80071160/i.test(t) && /DISM Package Manager|Cleanup-Image|RestoreHealth|ScanHealth/i.test(t), notStore:false},
 ];
 function runCauses(text){
   return CAUSE_TESTS.filter(c=>c.test(text)).map(c=>{
@@ -460,11 +515,59 @@ const OBS_TESTS = [
   {id:'shadow_copy', test:t=>/HarddiskVolumeShadowCopy/i.test(t)},
   {id:'reset_base', test:t=>/StartComponentCleanup|ResetBase|Component Cleanup/i.test(t)},
   {id:'pending_reboot', test:t=>/pending\.xml|poqexec|Reboot required|Reboot mark|Pending operations detected/i.test(t)},
+  {id:'store_source_corrupt', test:t=>/source file in store is also corrupted|Could not reproject corrupted file/i.test(t)},
+  {id:'no_mumcat', test:t=>/Missing replacement mum\/cat pair/i.test(t)},
 ];
 function runObs(text){
   return OBS_TESTS.filter(o=>o.test(text)).map(o=>{
     const tr=T.observations[o.id]; return {id:o.id, label:tr.label, text:tr.text};
   });
+}
+
+// разбор dism.log: пары «запущенная команда → итоговый HRESULT»
+function parseDism(text){
+  const lines=text.split(/\r?\n/);
+  const runs=[]; let cur=null;
+  for(const raw of lines){
+    let m;
+    if(m = raw.match(/Executing command line:\s*(.+?)\s*$/i)){
+      if(cur) runs.push(cur);
+      const t=raw.match(/^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)/);
+      let cmd=m[1].replace(/"?[A-Za-z]:\\[^"]*?Dism\.exe"?/i,'DISM').replace(/^dism(\.exe)?/i,'DISM').replace(/\s+/g,' ').trim();
+      if(!/^DISM/i.test(cmd)) cmd='DISM '+cmd;
+      cur={cmd, time:t?t[1]:'', hr:null};
+    } else if(m = raw.match(/DISM Package Manager processed the command line but failed\. HRESULT=([0-9A-Fa-f]{8})/)){
+      if(cur){ cur.hr='0x'+m[1].toLowerCase(); runs.push(cur); cur=null; }
+    } else if(/The operation completed successfully\./i.test(raw) && cur && /Image Session|CleanupImage|RestoreHealth|ScanHealth|CheckHealth/i.test(raw)){
+      cur.hr='0x00000000'; runs.push(cur); cur=null;
+    }
+  }
+  if(cur) runs.push(cur);
+  return runs;
+}
+
+// разбор CheckSUR-блока (System Update Readiness): повреждённые пакеты + сводка
+function parseSUR(text){
+  const lines=text.split(/\r?\n/);
+  const seen=new Map(); let summary={result:null, detected:null, repaired:null, breakdown:[]};
+  let pend=null, curBreak=[];
+  for(const raw of lines){
+    let m;
+    if(m = raw.match(/\(p\)\s*(CBS [A-Za-z ]*?(?:Corrupt|Missing|Mismatch))\s*\(n\)\s*([^\r\n]+?)\s*$/i)){
+      const name=m[2].trim();
+      pend={type:m[1].trim(), name, note:''};
+      if(!seen.has(name)) seen.set(name,pend); else pend=seen.get(name);
+    } else if(pend && (m = raw.match(/Repair failed:\s*([^\r\n]+?)\s*$/i))){
+      pend.note=m[1].trim(); pend=null;
+    } else if(m = raw.match(/Operation result:\s*(0x[0-9a-f]+)/i)){ summary.result=m[1].toLowerCase(); }
+    else if(m = raw.match(/Total Detected Corruption:\s*(\d+)/i)){ summary.detected=+m[1]; curBreak=[]; }
+    else if(m = raw.match(/Total Repaired Corruption:\s*(\d+)/i)){ summary.repaired=+m[1]; summary.breakdown=curBreak.slice(); }
+    else if(m = raw.match(/(CBS Manifest|CBS Metadata|CSI Manifest|CSI Metadata|CSI Payload) Corruption:\s*(\d+)/i)){
+      if(+m[2]>0) curBreak.push(`${m[1]}: ${m[2]}`);
+    }
+  }
+  if(!summary.breakdown.length && curBreak.length) summary.breakdown=curBreak;
+  return {pkgs:[...seen.values()], summary};
 }
 function detectOp(text){
   if(/\[SR\]\s*Verify(?:ing)? complete|\[SR\]\s*Repairing|Verify and Repair transaction/i.test(text)) return T.ops.sfc;
@@ -543,7 +646,9 @@ function analyze(text){
 
     // sfc — починка файлов
     let fm;
-    if(fm = msg.match(/Cannot repair member file\s+\[[^\]]*\]'?"?([^'"\]]+)/i)){
+    if(fm = msg.match(/\[SR\]\s*Could not reproject corrupted file.*?\\([A-Za-z0-9._\-]+\.(?:dll|exe|sys|cat|manifest|mui|ini)).*source file in store is also corrupted/i)){
+      addFile(files,fm[1],'store_corrupt',ts);
+    } else if(fm = msg.match(/Cannot repair member file\s+\[[^\]]*\]'?"?([^'"\]]+)/i)){
       addFile(files,fm[1],'cannot',ts);
     } else if(fm = msg.match(/Repairing\s+\d+\s+components|Repairing corrupted file|\[SR\]\s*Repairing/i)){
       const fn = msg.match(/'?"?([A-Za-z0-9._\-\\]+\.(?:dll|exe|sys|cat|manifest|mui|ini))/i);
@@ -578,9 +683,11 @@ function analyze(text){
   // профили причин — по всему тексту
   const causes = runCauses(text);
   const obs = runObs(text);
+  const dism = parseDism(text);
+  const sur = parseSUR(text);
 
   window._D = {info,warn,err,issues,minor,comps,sessions,corr,files,kbs,
-               sigs, causes, obs, _text:text,
+               sigs, causes, obs, dism, sur, _text:text,
                total:lines.length, op:detectOp(text), from:firstTime, to:lastTime};
   render(window._D);
 }
@@ -588,7 +695,8 @@ function addFile(map,path,status,ts){
   const key=path.trim();
   if(!map.has(key)) map.set(key,{status,last:ts});
   const e=map.get(key); e.last=ts;
-  if(status==='cannot'||status==='hashmismatch') e.status=status;
+  const rank={repaired:0,hashmismatch:1,cannot:2,store_corrupt:3};
+  if((rank[status]??0) >= (rank[e.status]??0)) e.status=status;
 }
 
 function render(d){
@@ -638,6 +746,31 @@ function render(d){
     obw.innerHTML = d.obs.map(o=>`<div class="obs"><h4>${esc(o.label)}</h4><p>${esc(o.text)}</p></div>`).join('');
   } else obw.innerHTML=`<div class="empty">${T.obs_none}</div>`;
 
+  // DISM runs
+  show('#sec-dism'); const dw=$('#dism');
+  if(d.dism && d.dism.length){
+    const fails=d.dism.filter(r=>r.hr && r.hr!=='0x00000000').length;
+    dw.innerHTML=`<div class="empty" style="margin-bottom:8px">${T.dism_summary(d.dism.length,fails)}</div>`+
+      d.dism.map(r=>{
+        const ok=!r.hr||r.hr==='0x00000000';
+        const res=ok?T.dism_ok:T.dism_fail(r.hr);
+        const tip=(!ok&&HR[r.hr])?`<div class="hint-hr">${esc(HR[r.hr])}</div>`:'';
+        return `<div class="dismrow ${ok?'okk':'fail'}">${T.dism_attempt(esc(r.cmd),res,r.time||'—')}${tip}</div>`;
+      }).join('');
+  } else dw.innerHTML=`<div class="empty">${T.dism_none}</div>`;
+
+  // CheckSUR packages
+  show('#sec-sur'); const surw=$('#sur');
+  if(d.sur && d.sur.pkgs.length){
+    const s=d.sur.summary;
+    const head=T.sur_summary(d.sur.pkgs.length, s.result?(s.result+(HR[s.result]?'':'' )):'');
+    const brk=s.breakdown.length?`<div class="empty" style="margin:4px 0 8px">${T.sur_break(s.breakdown)}${s.detected!=null?` · detected ${s.detected} / repaired ${s.repaired??0}`:''}</div>`:'';
+    surw.innerHTML=`<div class="empty" style="margin-bottom:6px">${head}</div>${brk}`+
+      d.sur.pkgs.slice(0,200).map(p=>
+        `<div class="surrow"><span class="tp">${esc(p.type.replace(/^CBS /,''))}</span>${esc(p.name)}${p.note?`<span class="nt">${esc(p.note)}</span>`:''}</div>`).join('')+
+      (d.sur.pkgs.length>200?`<div class="empty">…${d.sur.pkgs.length}</div>`:'');
+  } else surw.innerHTML=`<div class="empty">${T.sur_none}</div>`;
+
   // stats
   const st = $('#stats'); st.style.display='flex';
   st.innerHTML = `
@@ -662,7 +795,7 @@ function render(d){
   show('#sec-files'); const fw=$('#files');
   if(d.files.size){
     fw.innerHTML=[...d.files].map(([p,e])=>
-      `<div class="file-line ${e.status==='repaired'?'ok':''}">${esc(p)}<div class="st">${T.file_lbl[e.status]} · ${e.last}</div></div>`).join('');
+      `<div class="file-line ${e.status==='repaired'?'ok':(e.status==='store_corrupt'?'sev':'')}">${esc(p)}<div class="st">${T.file_lbl[e.status]} · ${e.last}</div></div>`).join('');
   } else fw.innerHTML=`<div class="empty">${T.files_none}</div>`;
 
   // KB
