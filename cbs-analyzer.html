@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CBS Log Analyzer</title>
+<style>
+  :root{
+    --ink:#10171f; --paper:#f3efe6; --line:#d8d0c0;
+    --steel:#3a5a78; --steel-d:#26384a;
+    --ok:#2f7d4f; --warn:#b5781a; --err:#b03030;
+    --chip:#e7e0d2; --mono:"SFMono-Regular",ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:Georgia,"Iowan Old Style","Times New Roman",serif;
+    line-height:1.5;
+  }
+  .wrap{max-width:1080px;margin:0 auto;padding:32px 24px 80px}
+  header{border-bottom:2px solid var(--ink);padding-bottom:14px;margin-bottom:8px;position:relative}
+  .langsw{position:absolute;top:0;right:0;display:flex;gap:0;border:1px solid var(--line);border-radius:4px;overflow:hidden}
+  .langsw button{font-family:var(--mono);font-size:11px;letter-spacing:.06em;padding:5px 10px;border:none;background:#fbf9f3;color:#6b7480;cursor:pointer}
+  .langsw button.on{background:var(--steel);color:#fff}
+  .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--steel)}
+  h1{font-size:34px;margin:6px 0 2px;letter-spacing:-.5px}
+  .sub{font-family:var(--mono);font-size:12px;color:#5b6470}
+
+  /* drop zone */
+  #drop{
+    margin-top:26px;border:1.5px dashed var(--steel);border-radius:4px;
+    background:#fbf9f3;padding:48px 24px;text-align:center;cursor:pointer;
+    transition:.15s background,.15s border-color;
+  }
+  #drop.hover{background:#eef3f7;border-color:var(--steel-d);border-style:solid}
+  #drop .big{font-size:20px;margin-bottom:6px}
+  #drop .hint{font-family:var(--mono);font-size:12px;color:#6b7480}
+  #file{display:none}
+
+  /* verdict banner */
+  .verdict{margin-top:28px;border-left:6px solid var(--steel);padding:18px 22px;background:#fbf9f3;border-radius:0 4px 4px 0;display:none}
+  .verdict.show{display:block}
+  .verdict.clean{border-color:var(--ok)}
+  .verdict.dirty{border-color:var(--err)}
+  .verdict h2{margin:0 0 4px;font-size:22px}
+  .verdict.clean h2{color:var(--ok)}
+  .verdict.dirty h2{color:var(--err)}
+  .verdict p{margin:4px 0;font-size:15px}
+
+  /* stat row */
+  .stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:22px}
+  .stat{flex:1;min-width:120px;border:1px solid var(--line);border-radius:4px;padding:14px 16px;background:#fbf9f3}
+  .stat .n{font-family:var(--mono);font-size:28px;font-weight:600;line-height:1}
+  .stat .l{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#6b7480;margin-top:6px}
+  .stat.err .n{color:var(--err)} .stat.warn .n{color:var(--warn)} .stat.ok .n{color:var(--ok)}
+
+  section{margin-top:36px;display:none}
+  section.show{display:block}
+  h3{font-size:13px;font-family:var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--steel);border-bottom:1px solid var(--line);padding-bottom:6px;margin-bottom:14px}
+
+  .cmd{position:relative;font-family:var(--mono);font-size:13px;background:var(--steel-d);color:#eef3f7;padding:14px 46px 14px 16px;border-radius:4px;margin:8px 0;white-space:pre-wrap;word-break:break-all}
+  .cmd .why{display:block;color:#9fb6cc;font-size:11px;margin-bottom:6px}
+  .copy{position:absolute;top:10px;right:10px;font-family:var(--mono);font-size:10px;letter-spacing:.08em;background:#ffffff22;color:#eef3f7;border:1px solid #ffffff44;border-radius:3px;padding:3px 7px;cursor:pointer}
+  .copy:hover{background:#ffffff33}
+
+  .comp{border:1px solid var(--line);border-left:4px solid var(--err);border-radius:0 4px 4px 0;background:#fbf9f3;padding:12px 16px;margin:8px 0}
+  .comp .name{font-family:var(--mono);font-size:13px;word-break:break-all}
+  .comp .meta{font-family:var(--mono);font-size:11px;color:#6b7480;margin-top:4px}
+  .comp .meta b{color:var(--ink)}
+
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#6b7480}
+  td.t{font-family:var(--mono);white-space:nowrap;color:#5b6470}
+  td.c{font-family:var(--mono);font-size:12px;word-break:break-word}
+  tr.lvl-Error td.c{color:var(--err)}
+  tr.lvl-Warning td.c{color:var(--warn)}
+  .more{font-family:var(--mono);font-size:12px;color:var(--steel);cursor:pointer;margin-top:10px;display:inline-block}
+
+  .sess{border:1px solid var(--line);border-radius:4px;margin:8px 0;background:#fbf9f3;overflow:hidden}
+  .sess summary{cursor:pointer;padding:11px 16px;font-family:var(--mono);font-size:12px;list-style:none;display:flex;gap:12px;align-items:center}
+  .sess summary::-webkit-details-marker{display:none}
+  .sess .dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+  .sess .dot.ok{background:var(--ok)} .sess .dot.err{background:var(--err)}
+  .sess summary .cli{flex:1;color:var(--ink)}
+  .sess summary .ct{color:#6b7480}
+  .sess .body{padding:6px 16px 14px;border-top:1px solid var(--line);font-family:var(--mono);font-size:12px;color:#5b6470}
+  .sess .body div{padding:2px 0}
+
+  footer{margin-top:60px;border-top:1px solid var(--line);padding-top:14px;font-family:var(--mono);font-size:11px;color:#8a92a0;line-height:1.7}
+  footer a{color:var(--steel);text-decoration:none}
+  footer a:hover{text-decoration:underline}
+  .empty{font-family:var(--mono);font-size:12px;color:#6b7480}
+
+  .opbar{margin-top:20px;display:none;flex-wrap:wrap;gap:18px;font-family:var(--mono);font-size:12px;color:#5b6470}
+  .opbar.show{display:flex}
+  .opbar b{color:var(--ink)}
+  .opbar .pill{background:var(--chip);border-radius:3px;padding:2px 8px}
+
+  .toolbar{margin-top:18px}
+  .tbtn{font-family:var(--mono);font-size:12px;background:var(--steel);color:#fff;border:none;border-radius:3px;padding:8px 14px;cursor:pointer}
+  .tbtn:hover{background:var(--steel-d)}
+
+  .filterbar{display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-bottom:12px;font-family:var(--mono);font-size:12px}
+  .filterbar input[type=text]{flex:1;min-width:160px;font-family:var(--mono);font-size:12px;padding:7px 10px;border:1px solid var(--line);border-radius:3px;background:#fbf9f3}
+  .filterbar label{cursor:pointer;display:flex;gap:5px;align-items:center}
+
+  .hint-hr{display:block;color:#8a6a3a;font-size:11px;margin-top:3px}
+  .file-line{border:1px solid var(--line);border-left:4px solid var(--warn);border-radius:0 4px 4px 0;background:#fbf9f3;padding:10px 14px;margin:6px 0;font-family:var(--mono);font-size:12px;word-break:break-all}
+  .file-line.ok{border-left-color:var(--ok)}
+  .file-line .st{font-size:11px;color:#6b7480}
+  .kbrow{border:1px solid var(--line);border-radius:4px;background:#fbf9f3;padding:10px 14px;margin:6px 0;font-family:var(--mono);font-size:12px;display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+  .kbrow .kb{font-weight:600}
+  .kbrow .hr{color:#6b7480}
+  .kbrow.fail{border-left:4px solid var(--err)}
+  .kbrow.okk{border-left:4px solid var(--ok)}
+
+  .cause{border:1px solid var(--line);border-left:5px solid var(--err);border-radius:0 4px 4px 0;background:#fbf9f3;padding:14px 18px;margin:10px 0}
+  .cause.store{border-left-color:var(--steel)}
+  .cause h4{margin:0 0 4px;font-size:17px}
+  .cause .why{font-size:13px;color:#4a525e;margin:0 0 4px}
+  .cause .tag{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;background:var(--chip);border-radius:3px;padding:2px 7px;color:#6b7480}
+  .group{border:1px solid var(--line);border-radius:4px;background:#fbf9f3;margin:6px 0;overflow:hidden}
+  .group summary{cursor:pointer;list-style:none;padding:10px 14px;font-family:var(--mono);font-size:12px;display:flex;gap:10px;align-items:center}
+  .group summary::-webkit-details-marker{display:none}
+  .group .badge{background:var(--err);color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;flex:0 0 auto}
+  .group summary .sg{flex:1;color:var(--ink);word-break:break-word}
+  .group .body{border-top:1px solid var(--line);padding:8px 14px;font-family:var(--mono);font-size:11px;color:#5b6470}
+  .group .body div{padding:2px 0;word-break:break-word}
+  .group .body b{color:var(--ink)}
+
+  .obs{border:1px solid var(--line);border-left:5px solid var(--steel);border-radius:0 4px 4px 0;background:#f4f7fa;padding:13px 18px;margin:9px 0}
+  .obs h4{margin:0 0 3px;font-size:15px;color:var(--steel-d)}
+  .obs p{margin:0;font-size:13px;color:#46505c}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="langsw"><button data-lang="ru" id="lng-ru">RU</button><button data-lang="en" id="lng-en">EN</button></div>
+    <div class="kicker">Windows Servicing · Component-Based Servicing</div>
+    <h1>CBS Log Analyzer</h1>
+    <div class="sub" data-i18n="sub"></div>
+  </header>
+
+  <div id="drop">
+    <div class="big" data-i18n="drop_big"></div>
+    <div class="hint" data-i18n="drop_hint"></div>
+    <input type="file" id="file" accept=".log,.txt,text/plain" multiple>
+  </div>
+
+  <div class="verdict" id="verdict"></div>
+
+  <div class="opbar" id="opbar"></div>
+
+  <div class="stats" id="stats" style="display:none"></div>
+
+  <div class="toolbar" id="toolbar" style="display:none">
+    <button class="tbtn" id="export" data-i18n="export"></button>
+  </div>
+
+  <section id="sec-cause"><h3 data-i18n="h_cause"></h3><div id="cause"></div></section>
+  <section id="sec-obs"><h3 data-i18n="h_obs"></h3><div id="obs"></div></section>
+  <section id="sec-comp"><h3 data-i18n="h_comp"></h3><div id="comp"></div></section>
+  <section id="sec-files"><h3 data-i18n="h_files"></h3><div id="files"></div></section>
+  <section id="sec-kb"><h3 data-i18n="h_kb"></h3><div id="kb"></div></section>
+  <section id="sec-cmd"><h3 data-i18n="h_cmd"></h3><div id="cmd"></div></section>
+  <section id="sec-err">
+    <h3 data-i18n="h_err"></h3>
+    <div class="filterbar" id="filterbar">
+      <input type="text" id="search" data-i18n-ph="search">
+      <label><input type="checkbox" class="flt" value="Error" checked> Error</label>
+      <label><input type="checkbox" class="flt" value="Warning" checked> Warning</label>
+    </div>
+    <div id="errtbl"></div>
+  </section>
+  <section id="sec-minor"><h3 data-i18n="h_minor"></h3><div id="minor"></div></section>
+  <section id="sec-sess"><h3 data-i18n="h_sess"></h3><div id="sess"></div></section>
+
+  <footer><span data-i18n="footer"></span><br><span data-i18n="credit"></span><a href="https://github.com/xor0x1" target="_blank" rel="noopener">github.com/xor0x1</a></footer>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const drop = $('#drop'), input = $('#file');
+
+// ===== i18n =====
+const I18N = {
+  ru:{
+    sub:'cbs.log / dism.log · разбор офлайн в браузере · ничего не отправляется',
+    drop_big:'Перетащите CBS.LOG сюда',
+    drop_hint:'или нажмите, чтобы выбрать файл · .log / .txt',
+    export:'⤓ Скопировать отчёт',
+    h_cause:'Причины и целевая починка', h_comp:'Повреждённые / упомянутые компоненты',
+    h_files:'Файлы (SR repair)', h_kb:'Обновления (KB)', h_cmd:'Команды для починки',
+    h_err:'Ошибки и предупреждения', h_minor:'Незначительное (отфильтровано из вердикта)', h_sess:'Сессии',
+    search:'поиск по тексту…',
+    footer:'Парсер эвристический: ориентируется на маркеры CSI/CBS (Error/Warning, store corruption, SR repair, session HRESULT). Итоговое решение по починке всегда за DISM/sfc.',
+    credit:'© 2026 xor0x1 (Lunik) · MIT · ',
+    files_n:n=>n+' файла', reading:'читаю…', mb:'МБ',
+    copy:'КОПИРОВАТЬ', copied:'СКОПИРОВАНО', exported:'✓ Скопировано',
+    v_bad:'⚠ Найдены проблемы', v_ok:'✓ Лог чистый',
+    v_bad_line:(u,i,c,f,k)=>`Уникальных проблем: <b>${u}</b> (значимых строк: ${i}) · компонентов: <b>${c}</b> · файлов: <b>${f}</b> · сбойных KB: <b>${k}</b>.`,
+    v_causes:cs=>`Распознанные причины: <b>${cs}</b>. Целевые команды — в разделе «Причины».`,
+    v_generic:'Рекомендуется восстановление — команды ниже.',
+    v_minor_extra:n=>` Плюс ${n} незначительных событий вынесены отдельно.`,
+    v_ok_line:(sr,det,mn)=>`Критичных проблем не найдено${sr?', SR Repair complete':''}${det!=null?`, Total Detected Corruption: ${det}`:''}.${mn?` ${mn} незначительных событий — см. ниже, на целостность не влияют.`:''} Действий не требуется.`,
+    ob_range:(a,b)=>`период: <b>${a}</b> → <b>${b}</b>`,
+    ob_corr:(d,r)=>`повреждений: <b>${d}</b> / починено <b>${r}</b>`,
+    ob_uniq:n=>`уникальных проблем: <b>${n}</b>`,
+    cause_notstore:'не store — DISM не поможет', cause_store:'хранилище компонентов',
+    cause_none:'Конкретных профилей причин не распознано — см. общие команды ниже.',
+    st_lines:'строк', st_comps:'компонентов',
+    comp_meta:(c,cat,lv,t)=>`упоминаний: <b>${c}</b> · категория: <b>${cat}</b> · уровень: <b>${lv}</b> · ${t}`,
+    comp_none:'Повреждённых компонентов не найдено.',
+    file_lbl:{cannot:'не удалось починить',hashmismatch:'хэш не совпал',repaired:'починен'},
+    files_none:'Событий починки файлов не найдено.',
+    kb_noerr:'без ошибок', kb_none:'Упоминаний обновлений не найдено.',
+    cmd_none:'Починка не требуется.',
+    th_time:'Время', th_level:'Уровень', th_msg:'Сообщение',
+    minor_none:'Незначительных событий нет.',
+    sess_started:'Старт', sess_nofin:'— (не завершена в логе)', sess_none:'Сессий обслуживания не обнаружено.',
+    err_none:'Значимых ошибок и предупреждений нет.', err_nofilter:'Ничего не найдено по фильтру.',
+    grp_head:(n,u)=>`${n} значимых строк свёрнуты в ${u} уникальных проблем`,
+    grp_level:'Уровень', grp_range:'Период', grp_ctx:'Контекст', grp_inner:'Текст ошибки', grp_hint:'Подсказка',
+    grp_more:n=>`…показаны первые 200 групп из ${n}`,
+    rep_op:'Операция', rep_range:'Период', rep_lines:'Строк',
+    rep_corr:(d,r)=>`Повреждений обнаружено/починено: ${d}/${r}`,
+    rep_comps:'Компоненты:', rep_files:'Файлы:', rep_errs:'Значимые ошибки (до 50):',
+    cmds:[
+      ['Сканирование состояния хранилища','DISM /Online /Cleanup-Image /ScanHealth'],
+      ['Восстановление через Windows Update (нужен интернет)','DISM /Online /Cleanup-Image /RestoreHealth'],
+      ['Если онлайн не помог — источник из ISO той же сборки/языка','DISM /Online /Cleanup-Image /RestoreHealth /Source:WIM:E:\\sources\\install.wim:1 /LimitAccess'],
+      ['Проверка и починка системных файлов','sfc /scannow'],
+    ],
+    ops:{ sfc:'sfc /scannow (System Repair)', dism:'DISM (обслуживание образа)', bg:'Фоновое обслуживание / установка обновлений', cbs:'Обслуживание компонентов (CBS)' },
+    HR:{
+      '0x800f081f':'Не найден источник восстановления (DISM не нашёл файлы). Нужен /Source из ISO той же сборки.',
+      '0x80073712':'Компонент в хранилище повреждён или отсутствует. Поможет DISM RestoreHealth.',
+      '0x800f0922':'Сбой установки обновления (часто мало места в System Reserved или .NET).',
+      '0x80073701':'ERROR_SXS_ASSEMBLY_MISSING — отсутствует сборка компонента.',
+      '0x80070002':'ERROR_FILE_NOT_FOUND — файл/ключ не найден (часто безобидно).',
+      '0x80070003':'ERROR_PATH_NOT_FOUND — путь не найден (часто offline-обслуживание по несуществующему диску/образу).',
+      '0x8007000d':'ERROR_INVALID_DATA — некорректные данные (нередко косметика, напр. сбой таймера).',
+      '0x80004005':'E_FAIL — общая ошибка; смотрите соседние строки для причины.',
+      '0x800f0831':'CBS не нашёл нужный пакет в хранилище для применения обновления.'
+    },
+    h_obs:'Наблюдения (не ошибки целостности)',
+    obs_none:'Особых наблюдений нет.',
+    observations:{
+      offline_path:{ label:'Offline-обслуживание: путь недоступен',
+        text:'Какой-то инструмент (часто бэкап/создание образа, монтирующий теневые копии) пытался обслужить offline-образ Windows по несуществующему пути или диску → 0x80070003 (ERROR_PATH_NOT_FOUND), и offline-сессия CBS не стартовала. Это сбой стороннего процесса, а не повреждение вашей системы — целостность онлайн-образа здесь ни при чём.' },
+      shadow_copy:{ label:'Работа с теневыми копиями (VSS)',
+        text:'В логе видна загрузка offline-кустов реестра из HarddiskVolumeShadowCopy — обычно это резервное копирование или антивирус/обслуживание образа, обращающиеся к снимкам тома. Само по себе не является проблемой.' },
+      reset_base:{ label:'Очистка старых компонентов (ResetBase / Component Cleanup)',
+        text:'Выполнялась очистка суперседированных компонентов (StartComponentCleanup / ResetBase). Это штатное обслуживание, уменьшающее WinSxS; откат к старым версиям обновлений после этого недоступен.' },
+      pending_reboot:{ label:'Ожидается перезагрузка',
+        text:'Есть отложенные операции, требующие перезагрузки (pending.xml / poqexec). Часть обслуживания завершится только после рестарта.' },
+    },
+    causes:{
+      spp_tokens:{ label:'Повреждены токены лицензирования (SPP)',
+        why:'Инсталлер лицензий SPP падает с ERROR_INVALID_DATA (0x8007000d) при обновлении токенов — повреждён tokens.dat. DISM/sfc не помогают: хранилище компонентов цело, падает прикладной шаг SPP. Если задействован csvlk-pack-License — это KMS/корпоративная активация; после сброса проверьте ключ и сервер KMS.',
+        fix:[['Остановить службу защиты ПО','net stop sppsvc'],
+             ['Удалить повреждённое хранилище токенов','del /q "%windir%\\ServiceProfiles\\NetworkService\\AppData\\Roaming\\Microsoft\\SoftwareProtectionPlatform\\tokens.dat"'],
+             ['Запустить службу обратно','net start sppsvc'],
+             ['Пересобрать токены лицензий','cscript //nologo "%windir%\\system32\\slmgr.vbs" /rilc'],
+             ['Перезагрузиться и повторить установку обновления','shutdown /r /t 0']] },
+      store_corruption:{ label:'Повреждение хранилища компонентов',
+        why:'CSI/CBS пометил хранилище повреждённым или не смог починить файл. Лечится восстановлением образа.',
+        fix:[['Сканирование состояния хранилища','DISM /Online /Cleanup-Image /ScanHealth'],
+             ['Восстановление через Windows Update','DISM /Online /Cleanup-Image /RestoreHealth'],
+             ['Источник из ISO той же сборки/языка, если онлайн не помог','DISM /Online /Cleanup-Image /RestoreHealth /Source:WIM:E:\\sources\\install.wim:1 /LimitAccess'],
+             ['Проверка и починка системных файлов','sfc /scannow']] },
+      missing_source:{ label:'Не найден источник восстановления',
+        why:'DISM не нашёл нужные файлы (0x800f081f). Нужен явный /Source из смонтированного ISO той же версии.',
+        fix:[['Смонтировать ISO той же сборки и указать источник','DISM /Online /Cleanup-Image /RestoreHealth /Source:ESD:E:\\sources\\install.esd:1 /LimitAccess']] },
+      update_install_fail:{ label:'Сбой установки обновления',
+        why:'Компонент/сборка отсутствует или повреждён при применении пакета.',
+        fix:[['Восстановить хранилище','DISM /Online /Cleanup-Image /RestoreHealth'],
+             ['Сбросить очередь Windows Update','net stop wuauserv & net stop bits & ren %windir%\\SoftwareDistribution SD.old & net start wuauserv & net start bits'],
+             ['Проверка системных файлов','sfc /scannow']] },
+    }
+  },
+  en:{
+    sub:'cbs.log / dism.log · parsed offline in your browser · nothing is uploaded',
+    drop_big:'Drop CBS.LOG here',
+    drop_hint:'or click to choose a file · .log / .txt',
+    export:'⤓ Copy report',
+    h_cause:'Causes & targeted fixes', h_comp:'Corrupt / referenced components',
+    h_files:'Files (SR repair)', h_kb:'Updates (KB)', h_cmd:'Repair commands',
+    h_err:'Errors & warnings', h_minor:'Minor (filtered out of the verdict)', h_sess:'Sessions',
+    search:'search text…',
+    footer:'Heuristic parser: keys off CSI/CBS markers (Error/Warning, store corruption, SR repair, session HRESULT). The final repair decision always rests with DISM/sfc.',
+    credit:'© 2026 xor0x1 (Lunik) · MIT · ',
+    files_n:n=>n+' files', reading:'reading…', mb:'MB',
+    copy:'COPY', copied:'COPIED', exported:'✓ Copied',
+    v_bad:'⚠ Problems found', v_ok:'✓ Clean log',
+    v_bad_line:(u,i,c,f,k)=>`Unique problems: <b>${u}</b> (significant lines: ${i}) · components: <b>${c}</b> · files: <b>${f}</b> · failed KBs: <b>${k}</b>.`,
+    v_causes:cs=>`Detected causes: <b>${cs}</b>. Targeted commands are in the “Causes” section.`,
+    v_generic:'A repair is recommended — commands below.',
+    v_minor_extra:n=>` Plus ${n} minor events listed separately.`,
+    v_ok_line:(sr,det,mn)=>`No critical problems found${sr?', SR Repair complete':''}${det!=null?`, Total Detected Corruption: ${det}`:''}.${mn?` ${mn} minor events — see below, they do not affect integrity.`:''} No action required.`,
+    ob_range:(a,b)=>`range: <b>${a}</b> → <b>${b}</b>`,
+    ob_corr:(d,r)=>`corruptions: <b>${d}</b> / repaired <b>${r}</b>`,
+    ob_uniq:n=>`unique problems: <b>${n}</b>`,
+    cause_notstore:'not a store issue — DISM won’t help', cause_store:'component store',
+    cause_none:'No specific cause profile recognized — see the general commands below.',
+    st_lines:'lines', st_comps:'components',
+    comp_meta:(c,cat,lv,t)=>`mentions: <b>${c}</b> · category: <b>${cat}</b> · level: <b>${lv}</b> · ${t}`,
+    comp_none:'No corrupt components found.',
+    file_lbl:{cannot:'could not repair',hashmismatch:'hash mismatch',repaired:'repaired'},
+    files_none:'No file-repair events found.',
+    kb_noerr:'no errors', kb_none:'No update references found.',
+    cmd_none:'No repair needed.',
+    th_time:'Time', th_level:'Level', th_msg:'Message',
+    minor_none:'No minor events.',
+    sess_started:'Started', sess_nofin:'— (not completed in log)', sess_none:'No servicing sessions detected.',
+    err_none:'No significant errors or warnings.', err_nofilter:'Nothing matches the filter.',
+    grp_head:(n,u)=>`${n} significant lines collapsed into ${u} unique problems`,
+    grp_level:'Level', grp_range:'Range', grp_ctx:'Context', grp_inner:'Error text', grp_hint:'Hint',
+    grp_more:n=>`…showing first 200 of ${n} groups`,
+    rep_op:'Operation', rep_range:'Range', rep_lines:'Lines',
+    rep_corr:(d,r)=>`Corruptions detected/repaired: ${d}/${r}`,
+    rep_comps:'Components:', rep_files:'Files:', rep_errs:'Significant errors (up to 50):',
+    cmds:[
+      ['Scan the store health','DISM /Online /Cleanup-Image /ScanHealth'],
+      ['Restore via Windows Update (internet required)','DISM /Online /Cleanup-Image /RestoreHealth'],
+      ['If online fails — source from an ISO of the same build/language','DISM /Online /Cleanup-Image /RestoreHealth /Source:WIM:E:\\sources\\install.wim:1 /LimitAccess'],
+      ['Check and repair system files','sfc /scannow'],
+    ],
+    ops:{ sfc:'sfc /scannow (System Repair)', dism:'DISM (image servicing)', bg:'Background servicing / update install', cbs:'Component servicing (CBS)' },
+    HR:{
+      '0x800f081f':'Repair source not found (DISM could not locate files). Needs /Source from an ISO of the same build.',
+      '0x80073712':'A component in the store is corrupt or missing. DISM RestoreHealth should help.',
+      '0x800f0922':'Update install failed (often low space in System Reserved, or a .NET issue).',
+      '0x80073701':'ERROR_SXS_ASSEMBLY_MISSING — a component assembly is missing.',
+      '0x80070002':'ERROR_FILE_NOT_FOUND — file/key not found (often harmless).',
+      '0x80070003':'ERROR_PATH_NOT_FOUND — path not found (often offline servicing against a missing drive/image).',
+      '0x8007000d':'ERROR_INVALID_DATA — invalid data (often cosmetic, e.g. a timer glitch).',
+      '0x80004005':'E_FAIL — generic error; check nearby lines for the cause.',
+      '0x800f0831':'CBS could not find the required package in the store to apply the update.'
+    },
+    h_obs:'Observations (not integrity errors)',
+    obs_none:'No notable observations.',
+    observations:{
+      offline_path:{ label:'Offline servicing: path unavailable',
+        text:'Some tool (often backup/imaging that mounts shadow copies) tried to service an offline Windows image against a non-existent path or drive → 0x80070003 (ERROR_PATH_NOT_FOUND), and the offline CBS session never started. This is a third-party process failing, not corruption of your live system — online image integrity is unaffected.' },
+      shadow_copy:{ label:'Shadow-copy (VSS) activity',
+        text:'The log shows offline registry hives loaded from HarddiskVolumeShadowCopy — typically backup or AV/imaging accessing volume snapshots. Not a problem in itself.' },
+      reset_base:{ label:'Old-component cleanup (ResetBase / Component Cleanup)',
+        text:'Superseded components were cleaned up (StartComponentCleanup / ResetBase). This is routine maintenance that shrinks WinSxS; rolling back to older update versions is no longer possible afterwards.' },
+      pending_reboot:{ label:'Reboot pending',
+        text:'There are deferred operations that require a restart (pending.xml / poqexec). Part of the servicing will only complete after a reboot.' },
+    },
+    causes:{
+      spp_tokens:{ label:'Corrupt licensing tokens (SPP)',
+        why:'The SPP licensing installer fails with ERROR_INVALID_DATA (0x8007000d) while updating tokens — tokens.dat is corrupt. DISM/sfc do not help: the component store is fine, it is the SPP application step that fails. If csvlk-pack-License is involved, that is KMS/volume activation; after the reset, check the KMS key and server.',
+        fix:[['Stop the Software Protection service','net stop sppsvc'],
+             ['Delete the corrupt token store','del /q "%windir%\\ServiceProfiles\\NetworkService\\AppData\\Roaming\\Microsoft\\SoftwareProtectionPlatform\\tokens.dat"'],
+             ['Start the service again','net start sppsvc'],
+             ['Rebuild the license token cache','cscript //nologo "%windir%\\system32\\slmgr.vbs" /rilc'],
+             ['Reboot and retry the update','shutdown /r /t 0']] },
+      store_corruption:{ label:'Component store corruption',
+        why:'CSI/CBS marked the store corrupt or could not repair a file. Fixed by restoring the image.',
+        fix:[['Scan the store health','DISM /Online /Cleanup-Image /ScanHealth'],
+             ['Restore via Windows Update','DISM /Online /Cleanup-Image /RestoreHealth'],
+             ['Source from an ISO of the same build/language if online fails','DISM /Online /Cleanup-Image /RestoreHealth /Source:WIM:E:\\sources\\install.wim:1 /LimitAccess'],
+             ['Check and repair system files','sfc /scannow']] },
+      missing_source:{ label:'Repair source not found',
+        why:'DISM could not find the required files (0x800f081f). An explicit /Source from a mounted ISO of the same version is needed.',
+        fix:[['Mount an ISO of the same build and point to the source','DISM /Online /Cleanup-Image /RestoreHealth /Source:ESD:E:\\sources\\install.esd:1 /LimitAccess']] },
+      update_install_fail:{ label:'Update installation failed',
+        why:'A component/assembly is missing or corrupt while applying the package.',
+        fix:[['Restore the store','DISM /Online /Cleanup-Image /RestoreHealth'],
+             ['Reset the Windows Update queue','net stop wuauserv & net stop bits & ren %windir%\\SoftwareDistribution SD.old & net start wuauserv & net start bits'],
+             ['Check system files','sfc /scannow']] },
+    }
+  }
+};
+let LANG = (()=>{ try{ const s=localStorage.getItem('cbsLang'); if(s) return s; }catch(e){} return /^ru/i.test(navigator.language||'') ? 'ru':'en'; })();
+let T = I18N[LANG];
+
+function applyStatic(){
+  document.documentElement.lang = LANG;
+  document.querySelectorAll('[data-i18n]').forEach(el=>{ el.textContent = T[el.getAttribute('data-i18n')]; });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el=>{ el.placeholder = T[el.getAttribute('data-i18n-ph')]; });
+  $('#lng-ru').classList.toggle('on', LANG==='ru');
+  $('#lng-en').classList.toggle('on', LANG==='en');
+}
+function setLang(l){
+  LANG=l; T=I18N[l]; try{ localStorage.setItem('cbsLang',l); }catch(e){}
+  applyStatic();
+  if(window._D){ window._D.op=detectOp(window._D._text); window._D.causes=runCauses(window._D._text); window._D.obs=runObs(window._D._text); render(window._D); }
+}
+$('#lng-ru').addEventListener('click',()=>setLang('ru'));
+$('#lng-en').addEventListener('click',()=>setLang('en'));
+
+drop.addEventListener('click', ()=>input.click());
+input.addEventListener('change', e=>{ if(e.target.files.length) read([...e.target.files]); });
+['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('hover');}));
+['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('hover');}));
+drop.addEventListener('drop',e=>{ const f=[...e.dataTransfer.files]; if(f.length) read(f); });
+
+function read(files){
+  drop.querySelector('.big').textContent = files.length>1 ? T.files_n(files.length) : files[0].name;
+  const totMb = files.reduce((s,f)=>s+f.size,0)/1048576;
+  drop.querySelector('.hint').textContent = totMb.toFixed(2)+' '+T.mb+' · '+T.reading;
+  let texts=[], done=0;
+  files.forEach((f,i)=>{
+    const r=new FileReader();
+    r.onload=()=>{ texts[i]=r.result; if(++done===files.length) analyze(texts.join('\n')); };
+    r.readAsText(f);
+  });
+}
+
+const RE_LINE = /^([\d-]{10})\s+([\d:.]+),\s+(Info|Warning|Error)\s+(\w+)\s+(.*)$/;
+const RE_COMP = /'([a-z0-9][a-z0-9._\-]*_[0-9a-f]{16}_[^']+)'/i;
+
+// HRESULT-подсказки берутся из текущего языка
+const HR = new Proxy({}, { get:(_,k)=>T.HR[k] });
+
+// «шумные» ошибки, не влияющие на целостность
+function isNoise(msg){
+  return /Current tick count lower than last tick count/i.test(msg)
+      || /deltastore\.cpp.*STATUS_INVALID_PARAMETER/i.test(msg)
+      || /Failed to (?:internally )?open package|Failed to clear CorruptionDetectedDuringAcr/i.test(msg);
+}
+
+// декодирование \uXXXX внутри Inner Error
+function decodeU(s){ return s.replace(/\\u([0-9a-fA-F]{4})/g,(_,h)=>String.fromCharCode(parseInt(h,16))); }
+
+// сигнатура ошибки для дедупликации: убираем id, время, тики, пути
+function signature(msg){
+  return msg
+    .replace(/^[0-9a-f]{8}@[\d/:.]+\s*/i,'')
+    .replace(/0x[0-9a-f]{8}/gi,'0x…')
+    .replace(/\{[0-9a-f-]{8,}[^}]*\}/gi,'{…}')
+    .replace(/\d{6,}/g,'#')
+    .replace(/\\[^']*?\\/g,'\\…\\')
+    .replace(/\s+/g,' ').trim().slice(0,160);
+}
+
+// тесты причин (язык-независимые); тексты — в T.causes[id]
+const CAUSE_TESTS = [
+  {id:'spp_tokens', test:t=>(/SLpUpdateComponentTokens|SPP Installer|Security-SPP-Component|SppInstaller|csvlk-pack-License|<sppInstaller/i.test(t) && /0x8007000d|ERROR_INVALID_DATA/i.test(t)) || /Failed execution of queue item Installer:\s*SppInstaller/i.test(t), notStore:true},
+  {id:'store_corruption', test:t=>/mark store corrupt|Store corruption detected|CorruptManifest|Cannot repair member file|Total Detected Corruption:\s*[1-9]/i.test(t), notStore:false},
+  {id:'missing_source', test:t=>/0x800f081f|CBS_E_SOURCE_MISSING|cannot find the source files/i.test(t), notStore:false},
+  {id:'update_install_fail', test:t=>/0x80073712|0x800f0922|0x80073701|ERROR_SXS_ASSEMBLY_MISSING/i.test(t), notStore:false},
+];
+function runCauses(text){
+  return CAUSE_TESTS.filter(c=>c.test(text)).map(c=>{
+    const tr=T.causes[c.id]; return {id:c.id, notStore:c.notStore, label:tr.label, why:tr.why, fix:tr.fix};
+  });
+}
+
+// наблюдения — нейтральные факты о сторонних/штатных моментах (без команд)
+// добавление нового: одна строка {id, test}
+const OBS_TESTS = [
+  {id:'offline_path', test:t=>/Failed to load offline store|Failed to initialize store parameters|Failed to (?:fully )?initialize (?:CBS )?session/i.test(t) && /0x80070003|ERROR_PATH_NOT_FOUND/i.test(t)},
+  {id:'shadow_copy', test:t=>/HarddiskVolumeShadowCopy/i.test(t)},
+  {id:'reset_base', test:t=>/StartComponentCleanup|ResetBase|Component Cleanup/i.test(t)},
+  {id:'pending_reboot', test:t=>/pending\.xml|poqexec|Reboot required|Reboot mark|Pending operations detected/i.test(t)},
+];
+function runObs(text){
+  return OBS_TESTS.filter(o=>o.test(text)).map(o=>{
+    const tr=T.observations[o.id]; return {id:o.id, label:tr.label, text:tr.text};
+  });
+}
+function detectOp(text){
+  if(/\[SR\]\s*Verify(?:ing)? complete|\[SR\]\s*Repairing|Verify and Repair transaction/i.test(text)) return T.ops.sfc;
+  if(/DISM Package Manager Provider|Cleanup-Image|RestoreHealth|ScanHealth/i.test(text)) return T.ops.dism;
+  if(/Startup Processing|TrustedInstaller.*idle|Reboot mark/i.test(text)) return T.ops.bg;
+  return T.ops.cbs;
+}
+
+function analyze(text){
+  const lines = text.split(/\r?\n/);
+  let info=0, warn=0, err=0, firstTime=null, lastTime=null;
+  const issues = [], minor = [];
+  const sigs = new Map();    // signature -> {count, sample, level, first, last}
+  let lastCtx = '';          // последняя содержательная строка (инсталлер/пакет/компонент)
+  let pendingInner = '';     // декодированный текст Inner Error
+  const comps = new Map();
+  const sessions = []; let cur=null;
+  const corr = { detected:null, repaired:null, srComplete:false };
+  const files = new Map();   // path -> {status, last}
+  const kbs = new Map();     // KB -> {hr:Set, last}
+
+  for(const raw of lines){
+    const m = raw.match(RE_LINE);
+    if(!m){
+      // строка-продолжение без timestamp: вытащить декодированный текст ошибки
+      if(/\\u[0-9a-fA-F]{4}/.test(raw)){
+        const dec=decodeU(raw).replace(/[\[\]'"\r\n]/g,'').trim();
+        if(dec && dec.length>1){
+          pendingInner=dec;
+          if(issues.length){
+            const li=issues[issues.length-1]; li.inner=dec;
+            const g=sigs.get(signature(li.raw)); if(g && !g.inner) g.inner=dec;
+          }
+        }
+      }
+      continue;
+    }
+    const [,date,time,level,tag,msg] = m;
+    const ts = date+' '+time;
+    if(!firstTime) firstTime=ts; lastTime=ts;
+    if(level==='Info') info++; else if(level==='Warning') warn++; else err++;
+
+    // контекст: какой инсталлер/пакет/компонент сейчас обрабатывается
+    let cx;
+    if(cx = msg.match(/Installer name:\s*'([^']+)'/i)) lastCtx='Installer: '+cx[1];
+    else if(cx = msg.match(/(SPP Installer:[^\r\n]*?completed with hr=0x[0-9a-f]+)/i)) lastCtx=cx[1];
+    else if(cx = msg.match(/New component:\s*\[[^\]]*\]'([^,']+)/i)) lastCtx='Component: '+cx[1];
+    else if(cx = msg.match(/Package:\s*([^\s,]+).*?Identifier:\s*(KB\d+)/i)) lastCtx=cx[2]+' / '+cx[1];
+    else if(cx = msg.match(/Failed execution of queue item Installer:\s*(\w+)/i)) lastCtx='Failed installer: '+cx[1];
+    // текст Inner Error (часто \uXXXX в следующей строке)
+    let ie;
+    if(ie = msg.match(/Inner Error Message from AI.*$/i)) pendingInner='';
+    if(ie = msg.match(/\\u[0-9a-fA-F]{4}/)) { const dec=decodeU(msg).replace(/[\[\]'\r\n]/g,'').trim(); if(dec) pendingInner=dec; }
+
+    if(level!=='Info'){
+      const c = msg.match(RE_COMP);
+      const noise = isNoise(msg);
+      const rec = {time:ts, level, tag, comp:c?c[1]:null, raw:msg, noise, ctx:lastCtx, inner:pendingInner};
+      (noise ? minor : issues).push(rec);
+      if(!noise){
+        const sg = signature(msg);
+        if(!sigs.has(sg)) sigs.set(sg,{count:0,sample:msg,level,first:ts,last:ts,ctx:lastCtx,inner:pendingInner});
+        const e=sigs.get(sg); e.count++; e.last=ts; if(lastCtx)e.ctx=lastCtx; if(pendingInner)e.inner=pendingInner;
+      }
+    }
+
+    // компоненты
+    const cm = msg.match(RE_COMP);
+    if(cm && /corrupt|repair|unable to load|cannot|missing|mark store/i.test(msg)){
+      const n = cm[1];
+      if(!comps.has(n)) comps.set(n,{count:0,cat:new Set(),lvl:new Set(),last:''});
+      const e = comps.get(n); e.count++; e.lvl.add(level); e.last = ts;
+      const cat = msg.match(/category\s+\[[^\]]*\]'([^']+)'/i);
+      if(cat) e.cat.add(cat[1]); else if(/CorruptManifest/i.test(msg)) e.cat.add('CorruptManifest');
+    }
+
+    // sfc — починка файлов
+    let fm;
+    if(fm = msg.match(/Cannot repair member file\s+\[[^\]]*\]'?"?([^'"\]]+)/i)){
+      addFile(files,fm[1],'cannot',ts);
+    } else if(fm = msg.match(/Repairing\s+\d+\s+components|Repairing corrupted file|\[SR\]\s*Repairing/i)){
+      const fn = msg.match(/'?"?([A-Za-z0-9._\-\\]+\.(?:dll|exe|sys|cat|manifest|mui|ini))/i);
+      if(fn) addFile(files,fn[1],'repaired',ts);
+    } else if(fm = msg.match(/Hashes for file member\s+\[[^\]]*\]'?"?([^'"\]]+).*do not match/i)){
+      addFile(files,fm[1],'hashmismatch',ts);
+    }
+
+    // KB-обновления
+    const kb = msg.match(/\b(KB\d{6,7})\b/i);
+    if(kb){
+      const k=kb[1].toUpperCase();
+      if(!kbs.has(k)) kbs.set(k,{hr:new Set(),last:''});
+      const e=kbs.get(k); e.last=ts;
+      const hr=msg.match(/HRESULT\s*=\s*(0x[0-9a-f]+)/i);
+      if(hr) e.hr.add(hr[1].toLowerCase());
+    }
+
+    // сессии
+    const ss = msg.match(/Exec:\s*Session processing started\.\s*Client:\s*([^,]+),\s*Session\(([^)]*)\)/i);
+    if(ss){ cur={client:ss[1].trim(),store:ss[2].trim(),started:ts,hr:null}; sessions.push(cur); }
+    const se = msg.match(/Exec:\s*Processing complete.*HRESULT\s*=\s*(0x[0-9a-f]+)\s*-\s*([A-Z_]+)/i);
+    if(se && cur){ cur.hr = se[1]+' '+se[2]; cur=null; }
+
+    // corruption totals
+    let mm;
+    if(mm = msg.match(/Total Detected Corruption:\s*(\d+)/i)) corr.detected = +mm[1];
+    if(mm = msg.match(/Total Repaired Corruption:\s*(\d+)/i)) corr.repaired = +mm[1];
+    if(/\[SR\]\s*Repair complete/i.test(msg)) corr.srComplete = true;
+  }
+
+  // профили причин — по всему тексту
+  const causes = runCauses(text);
+  const obs = runObs(text);
+
+  window._D = {info,warn,err,issues,minor,comps,sessions,corr,files,kbs,
+               sigs, causes, obs, _text:text,
+               total:lines.length, op:detectOp(text), from:firstTime, to:lastTime};
+  render(window._D);
+}
+function addFile(map,path,status,ts){
+  const key=path.trim();
+  if(!map.has(key)) map.set(key,{status,last:ts});
+  const e=map.get(key); e.last=ts;
+  if(status==='cannot'||status==='hashmismatch') e.status=status;
+}
+
+function render(d){
+  // критичность: реальные проблемы, без шума
+  const realComp = d.comps.size;
+  const badFiles = [...d.files.values()].filter(f=>f.status!=='repaired').length;
+  const failKb = [...d.kbs.values()].filter(k=>[...k.hr].some(h=>h!=='0x00000000'&&h!=='0x0')).length;
+  const corrupt = (d.corr.detected||0) > (d.corr.repaired||0);
+  const critical = d.issues.length>0 || realComp>0 || badFiles>0 || failKb>0 || corrupt;
+
+  // verdict
+  const v = $('#verdict'); v.className='verdict show';
+  const uniq = d.sigs ? d.sigs.size : d.issues.length;
+  if(critical){
+    v.classList.add('dirty');
+    v.innerHTML = `<h2>${T.v_bad}</h2>
+      <p>${T.v_bad_line(uniq,d.issues.length,realComp,badFiles,failKb)}</p>
+      <p>${d.causes&&d.causes.length?T.v_causes(d.causes.map(c=>c.label).join('; ')):T.v_generic}${d.minor.length?T.v_minor_extra(d.minor.length):''}</p>`;
+  } else {
+    v.classList.add('clean');
+    v.innerHTML = `<h2>${T.v_ok}</h2>
+      <p>${T.v_ok_line(d.corr.srComplete, d.corr.detected, d.minor.length||0)}</p>`;
+  }
+
+  // op bar
+  const ob=$('#opbar'); ob.className='opbar show';
+  ob.innerHTML = `<span class="pill">${esc(d.op)}</span>`+
+    (d.from?`<span>${T.ob_range(d.from,d.to)}</span>`:'')+
+    (d.corr.detected!=null?`<span>${T.ob_corr(d.corr.detected,d.corr.repaired??0)}</span>`:'')+
+    (d.sigs&&d.sigs.size?`<span>${T.ob_uniq([...d.sigs.values()].length)}</span>`:'');
+
+  // causes
+  show('#sec-cause'); const ca=$('#cause');
+  if(d.causes && d.causes.length){
+    ca.innerHTML = d.causes.map(c=>
+      `<div class="cause ${c.notStore?'':'store'}">
+        <span class="tag">${c.notStore?T.cause_notstore:T.cause_store}</span>
+        <h4>${esc(c.label)}</h4>
+        <p class="why">${esc(c.why)}</p>
+        ${c.fix.map(([why,cmd])=>`<div class="cmd"><span class="why">${esc(why)}</span>${esc(cmd)}<button class="copy" onclick="cp(this)">${T.copy}</button></div>`).join('')}
+      </div>`).join('');
+  } else ca.innerHTML=`<div class="empty">${T.cause_none}</div>`;
+
+  // observations (neutral)
+  show('#sec-obs'); const obw=$('#obs');
+  if(d.obs && d.obs.length){
+    obw.innerHTML = d.obs.map(o=>`<div class="obs"><h4>${esc(o.label)}</h4><p>${esc(o.text)}</p></div>`).join('');
+  } else obw.innerHTML=`<div class="empty">${T.obs_none}</div>`;
+
+  // stats
+  const st = $('#stats'); st.style.display='flex';
+  st.innerHTML = `
+    <div class="stat"><div class="n">${d.total.toLocaleString(LANG)}</div><div class="l">${T.st_lines}</div></div>
+    <div class="stat ok"><div class="n">${d.info.toLocaleString(LANG)}</div><div class="l">Info</div></div>
+    <div class="stat warn"><div class="n">${d.warn}</div><div class="l">Warning</div></div>
+    <div class="stat err"><div class="n">${d.err}</div><div class="l">Error</div></div>
+    <div class="stat ${realComp?'err':'ok'}"><div class="n">${realComp}</div><div class="l">${T.st_comps}</div></div>`;
+  $('#toolbar').style.display='block';
+
+  // components
+  show('#sec-comp'); const cw=$('#comp');
+  if(realComp){
+    cw.innerHTML='';
+    for(const [name,e] of d.comps)
+      cw.insertAdjacentHTML('beforeend',
+        `<div class="comp"><div class="name">${esc(name)}</div>
+          <div class="meta">${T.comp_meta(e.count,[...e.cat].join(', ')||'—',[...e.lvl].join('/'),e.last)}</div></div>`);
+  } else cw.innerHTML=`<div class="empty">${T.comp_none}</div>`;
+
+  // files (SR)
+  show('#sec-files'); const fw=$('#files');
+  if(d.files.size){
+    fw.innerHTML=[...d.files].map(([p,e])=>
+      `<div class="file-line ${e.status==='repaired'?'ok':''}">${esc(p)}<div class="st">${T.file_lbl[e.status]} · ${e.last}</div></div>`).join('');
+  } else fw.innerHTML=`<div class="empty">${T.files_none}</div>`;
+
+  // KB
+  show('#sec-kb'); const kw=$('#kb');
+  if(d.kbs.size){
+    kw.innerHTML=[...d.kbs].map(([k,e])=>{
+      const codes=[...e.hr].filter(h=>h!=='0x00000000'&&h!=='0x0');
+      const fail=codes.length>0;
+      const hint=codes.map(c=>HR[c]?`${c} — ${HR[c]}`:c).join('; ');
+      return `<div class="kbrow ${fail?'fail':'okk'}"><span class="kb">${esc(k)}</span>`+
+        (fail?`<span class="hr">${esc(hint)}</span>`:`<span class="hr">${T.kb_noerr}</span>`)+
+        `<span class="hr">${e.last}</span></div>`;
+    }).join('');
+  } else kw.innerHTML=`<div class="empty">${T.kb_none}</div>`;
+
+  // fix commands
+  show('#sec-cmd'); const cm=$('#cmd');
+  if(critical){
+    cm.innerHTML = T.cmds.map(([why,c])=>
+      `<div class="cmd"><span class="why">${why}</span>${esc(c)}<button class="copy" onclick="cp(this)">${T.copy}</button></div>`).join('');
+  } else cm.innerHTML=`<div class="empty">${T.cmd_none}</div>`;
+
+  // errors table (filterable)
+  show('#sec-err'); $('#filterbar').style.display = d.issues.length?'flex':'none';
+  drawIssues();
+
+  // minor
+  show('#sec-minor'); const mw=$('#minor');
+  if(d.minor.length){
+    mw.innerHTML=`<table><thead><tr><th>${T.th_time}</th><th>${T.th_level}</th><th>${T.th_msg}</th></tr></thead><tbody>`+
+      d.minor.slice(0,100).map(i=>{
+        const hr=i.raw.match(/(0x[0-9a-f]{8})/i);
+        const tip=hr&&HR[hr[1].toLowerCase()]?`<span class="hint-hr">${esc(HR[hr[1].toLowerCase()])}</span>`:'';
+        return `<tr class="lvl-${i.level}"><td class="t">${i.time}</td><td>${i.level}</td><td class="c">${esc(i.raw)}${tip}</td></tr>`;
+      }).join('')+`</tbody></table>`;
+  } else mw.innerHTML=`<div class="empty">${T.minor_none}</div>`;
+
+  // sessions
+  show('#sec-sess'); const sw=$('#sess');
+  if(d.sessions.length){
+    sw.innerHTML = d.sessions.map(s=>{
+      const ok = !s.hr || /S_OK/.test(s.hr);
+      return `<details class="sess"><summary><span class="dot ${ok?'ok':'err'}"></span><span class="cli">${esc(s.client)}</span><span class="ct">${ok?'OK':'FAIL'}</span></summary>
+        <div class="body"><div>Store: ${esc(s.store)}</div><div>${T.sess_started}: ${s.started}</div><div>HRESULT: ${esc(s.hr||T.sess_nofin)}</div></div></details>`;
+    }).join('');
+  } else sw.innerHTML=`<div class="empty">${T.sess_none}</div>`;
+}
+
+function drawIssues(){
+  const d=window._D; if(!d) return;
+  const q=($('#search').value||'').toLowerCase();
+  const lv=[...document.querySelectorAll('.flt:checked')].map(c=>c.value);
+  const et=$('#errtbl');
+  if(!d.sigs || !d.sigs.size){ et.innerHTML=`<div class="empty">${T.err_none}</div>`; return; }
+  const groups=[...d.sigs.values()]
+    .filter(g=>lv.includes(g.level)&&(!q||g.sample.toLowerCase().includes(q)||(g.ctx||'').toLowerCase().includes(q)))
+    .sort((a,b)=>b.count-a.count);
+  if(!groups.length){ et.innerHTML=`<div class="empty">${T.err_nofilter}</div>`; return; }
+  const totalUniq=[...d.sigs.values()].length;
+  et.innerHTML=`<div class="empty" style="margin-bottom:8px">${T.grp_head(d.issues.length,totalUniq)}</div>`+
+    groups.slice(0,200).map(g=>{
+      const hr=g.sample.match(/(0x[0-9a-f]{8})/i);
+      const tip=hr&&HR[hr[1].toLowerCase()]?HR[hr[1].toLowerCase()]:'';
+      return `<details class="group"><summary>
+        <span class="badge">×${g.count}</span>
+        <span class="sg">${esc(g.sample.slice(0,140))}</span></summary>
+        <div class="body">
+          <div><b>${T.grp_level}:</b> ${g.level} · <b>${T.grp_range}:</b> ${g.first} → ${g.last}</div>
+          ${g.ctx?`<div><b>${T.grp_ctx}:</b> ${esc(g.ctx)}</div>`:''}
+          ${g.inner?`<div><b>${T.grp_inner}:</b> ${esc(g.inner)}</div>`:''}
+          ${tip?`<div><b>${T.grp_hint}:</b> ${esc(tip)}</div>`:''}
+        </div></details>`;
+    }).join('')+(groups.length>200?`<div class="empty">${T.grp_more(groups.length)}</div>`:'');
+}
+
+function buildReport(){
+  const d=window._D; if(!d) return '';
+  const L=[];
+  L.push('=== CBS Log Analyzer ===');
+  L.push(T.rep_op+': '+d.op);
+  if(d.from) L.push(T.rep_range+': '+d.from+' → '+d.to);
+  L.push(`${T.rep_lines}: ${d.total} · Info: ${d.info} · Warning: ${d.warn} · Error: ${d.err}`);
+  if(d.corr.detected!=null) L.push(T.rep_corr(d.corr.detected,d.corr.repaired??0));
+  if(d.comps.size){ L.push('\n'+T.rep_comps); for(const[n,e]of d.comps) L.push(`  - ${n} [${[...e.cat].join(',')||'—'}] x${e.count}`); }
+  if(d.files.size){ L.push('\n'+T.rep_files); for(const[p,e]of d.files) L.push(`  - ${p} (${e.status})`); }
+  if(d.kbs.size){ L.push('\nKB:'); for(const[k,e]of d.kbs){const c=[...e.hr].filter(h=>h!=='0x00000000'&&h!=='0x0');L.push(`  - ${k}${c.length?' '+c.join(','):' ok'}`);} }
+  if(d.issues.length){ L.push('\n'+T.rep_errs); d.issues.slice(0,50).forEach(i=>L.push(`  ${i.time} ${i.level} ${i.raw}`)); }
+  return L.join('\n');
+}
+
+$('#search').addEventListener('input', drawIssues);
+document.querySelectorAll('.flt').forEach(c=>c.addEventListener('change', drawIssues));
+$('#export').addEventListener('click', e=>{
+  navigator.clipboard.writeText(buildReport());
+  const b=e.target, t=b.textContent; b.textContent=T.exported; setTimeout(()=>b.textContent=t,1300);
+});
+
+function show(sel){ $(sel).classList.add('show'); }
+function esc(s){ return (s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function cp(btn){
+  navigator.clipboard.writeText(btn.parentNode.childNodes[1].textContent.trim());
+  const t=btn.textContent; btn.textContent=T.copied; setTimeout(()=>btn.textContent=t,1200);
+}
+
+applyStatic();
+</script>
+</body>
+</html>
