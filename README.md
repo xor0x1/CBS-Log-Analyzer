@@ -26,8 +26,11 @@ Drag a log onto the page and read top to bottom: **verdict → causes → comman
   - corrupt SPP licensing tokens → reset sppsvc + tokens.dat (with a note that DISM won't help here)
   - missing repair source (0x800f081f) → DISM with /Source
   - failed update install → restore + Windows Update queue reset
-- **Observations** — a neutral block for third-party / informational moments (offline servicing against a missing drive, VSS shadow-copy activity, component cleanup / ResetBase, pending reboot). Explanations only, no commands.
-- **HRESULT decoding** — common codes (0x800f081f, 0x80073712, 0x8007000d, 0x80070003, …) in plain language; also decodes `\uXXXX` Inner Error text.
+  - DISM online source missing (0x80071160) → /Source from ISO + /LimitAccess instead of retrying online
+- **dism.log support** — parses `dism.log` too (drop it alongside CBS): lists each DISM run (RestoreHealth / ScanHealth …), its time and final HRESULT, with a pass/fail summary so you can see what was already tried.
+- **CheckSUR / corrupt packages** — extracts the System Update Readiness block: each corrupt `.mum`/`.cat` package with its type (Catalog / MUM / Manifest) and report note, plus a summary with the corruption breakdown (Manifest / Metadata / Payload) and operation result.
+- **Observations** — a neutral block for third-party / informational moments (offline servicing against a missing drive, VSS shadow-copy activity, component cleanup / ResetBase, pending reboot, store source corrupt, missing mum/cat replacement). Explanations only, no commands.
+- **HRESULT decoding** — common codes (0x800f081f, 0x80073712, 0x8007000d, 0x80070003, 0x80071160, …) in plain language; also decodes `\uXXXX` Inner Error text.
 - **Context linking** — shows which installer / package / KB / component was failing.
 - **KB updates & SR file repairs** — flags failed KBs, tracks SR file repairs and servicing sessions with their HRESULT.
 - **Convenience** — text search and level filter in the table, "Copy report" button (text summary), multi-file support (cbs.log + cbs.persist.log).
@@ -37,7 +40,7 @@ Drag a log onto the page and read top to bottom: **verdict → causes → comman
 
 1. Download `cbs-analyzer.html`.
 2. Open it in any modern browser (no internet required).
-3. Drag your `CBS.log` onto the page — or click to choose a file.
+3. Drag your `CBS.log` onto the page — or click to choose a file. You can drop `CBS.log` and `dism.log` together for a combined analysis.
 4. Read the verdict, then the causes/observations, then the suggested commands.
 
 Logs are usually at `C:\Windows\Logs\CBS\CBS.log` and `C:\Windows\Logs\DISM\dism.log`.
@@ -74,8 +77,11 @@ New cause profiles and observations are easy to add: one entry in `CAUSE_TESTS` 
   - повреждённые токены лицензирования SPP → сброс sppsvc + tokens.dat (с пометкой, что DISM здесь бесполезен)
   - нет источника восстановления (0x800f081f) → DISM с /Source
   - сбой установки обновления → восстановление + сброс очереди Windows Update
-- **Наблюдения** — нейтральный блок для сторонних / информационных моментов (offline-обслуживание по несуществующему диску, теневые копии VSS, очистка компонентов / ResetBase, ожидание перезагрузки). Только пояснения, без команд.
-- **Расшифровка HRESULT** — частые коды (0x800f081f, 0x80073712, 0x8007000d, 0x80070003, …) человеческим языком; декодирует и текст Inner Error из `\uXXXX`.
+  - DISM: онлайн-источник недоступен (0x80071160) → /Source из ISO + /LimitAccess вместо повтора онлайн
+- **Поддержка dism.log** — разбирает и `dism.log` (кидайте его вместе с CBS): показывает каждый запуск DISM (RestoreHealth / ScanHealth …), время и итоговый HRESULT, со сводкой успех/сбой — видно, что уже пробовали.
+- **CheckSUR / повреждённые пакеты** — извлекает блок System Update Readiness: каждый повреждённый пакет `.mum`/`.cat` с типом (Catalog / MUM / Manifest) и причиной репорта, плюс сводка с разбивкой повреждений (Manifest / Metadata / Payload) и результатом операции.
+- **Наблюдения** — нейтральный блок для сторонних / информационных моментов (offline-обслуживание по несуществующему диску, теневые копии VSS, очистка компонентов / ResetBase, ожидание перезагрузки, повреждённый источник в store, отсутствие замены mum/cat). Только пояснения, без команд.
+- **Расшифровка HRESULT** — частые коды (0x800f081f, 0x80073712, 0x8007000d, 0x80070003, 0x80071160, …) человеческим языком; декодирует и текст Inner Error из `\uXXXX`.
 - **Привязка к контексту** — показывает, какой инсталлер / пакет / KB / компонент падал.
 - **Обновления KB и починка файлов SR** — помечает сбойные KB, отслеживает SR-починку файлов и сессии обслуживания с их HRESULT.
 - **Удобство** — поиск и фильтр по уровню в таблице, кнопка «Скопировать отчёт» (текстовая сводка), поддержка нескольких файлов сразу (cbs.log + cbs.persist.log).
@@ -85,7 +91,7 @@ New cause profiles and observations are easy to add: one entry in `CAUSE_TESTS` 
 
 1. Скачайте `cbs-analyzer.html`.
 2. Откройте в любом современном браузере (интернет не нужен).
-3. Перетащите свой `CBS.log` на страницу — или нажмите, чтобы выбрать файл.
+3. Перетащите свой `CBS.log` на страницу — или нажмите, чтобы выбрать файл. Можно перетащить `CBS.log` и `dism.log` вместе — анализ объединится.
 4. Прочитайте вердикт, затем причины/наблюдения, затем предложенные команды.
 
 Логи обычно лежат в `C:\Windows\Logs\CBS\CBS.log` и `C:\Windows\Logs\DISM\dism.log`.
