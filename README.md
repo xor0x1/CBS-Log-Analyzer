@@ -28,7 +28,8 @@ Drag a log onto the page and read top to bottom: **verdict → causes → comman
   - failed update install → restore + Windows Update queue reset
   - DISM online source missing (0x80071160) → /Source from ISO + /LimitAccess instead of retrying online
 - **dism.log support** — parses `dism.log` too (drop it alongside CBS): lists each DISM run (RestoreHealth / ScanHealth …), its time and final HRESULT, with a pass/fail summary so you can see what was already tried.
-- **CheckSUR / corrupt packages** — extracts the System Update Readiness block: each corrupt `.mum`/`.cat` package with its type (Catalog / MUM / Manifest) and report note, plus a summary with the corruption breakdown (Manifest / Metadata / Payload) and operation result.
+- **CheckSUR / corrupt packages** — extracts the System Update Readiness block: each corrupt `.mum`/`.cat` package with its type (Catalog / MUM / Manifest) and report note, plus a summary with the corruption breakdown (Manifest / Metadata / Payload), operation result, and any related KB numbers pulled from the package names.
+- **OS-aware advice** — detects the Windows version from the log build (7 / 8.x / 10–11) and adapts the suggested commands and observation texts accordingly: on Windows 7 it recommends the System Update Readiness Tool (CheckSUR, KB947821) and manual mum/cat replacement instead of `DISM /RestoreHealth`, which does not exist there.
 - **Observations** — a neutral block for third-party / informational moments (offline servicing against a missing drive, VSS shadow-copy activity, component cleanup / ResetBase, pending reboot, store source corrupt, missing mum/cat replacement). Explanations only, no commands.
 - **HRESULT decoding** — common codes (0x800f081f, 0x80073712, 0x8007000d, 0x80070003, 0x80071160, …) in plain language; also decodes `\uXXXX` Inner Error text.
 - **Context linking** — shows which installer / package / KB / component was failing.
@@ -79,7 +80,8 @@ New cause profiles and observations are easy to add: one entry in `CAUSE_TESTS` 
   - сбой установки обновления → восстановление + сброс очереди Windows Update
   - DISM: онлайн-источник недоступен (0x80071160) → /Source из ISO + /LimitAccess вместо повтора онлайн
 - **Поддержка dism.log** — разбирает и `dism.log` (кидайте его вместе с CBS): показывает каждый запуск DISM (RestoreHealth / ScanHealth …), время и итоговый HRESULT, со сводкой успех/сбой — видно, что уже пробовали.
-- **CheckSUR / повреждённые пакеты** — извлекает блок System Update Readiness: каждый повреждённый пакет `.mum`/`.cat` с типом (Catalog / MUM / Manifest) и причиной репорта, плюс сводка с разбивкой повреждений (Manifest / Metadata / Payload) и результатом операции.
+- **CheckSUR / повреждённые пакеты** — извлекает блок System Update Readiness: каждый повреждённый пакет `.mum`/`.cat` с типом (Catalog / MUM / Manifest) и причиной репорта, плюс сводка с разбивкой повреждений (Manifest / Metadata / Payload), результатом операции и связанными KB-номерами, извлечёнными из имён пакетов.
+- **Учёт версии ОС** — определяет версию Windows по сборке из лога (7 / 8.x / 10–11) и подстраивает команды и тексты наблюдений: на Windows 7 рекомендует System Update Readiness Tool (CheckSUR, KB947821) и ручную подстановку mum/cat вместо `DISM /RestoreHealth`, которого там нет.
 - **Наблюдения** — нейтральный блок для сторонних / информационных моментов (offline-обслуживание по несуществующему диску, теневые копии VSS, очистка компонентов / ResetBase, ожидание перезагрузки, повреждённый источник в store, отсутствие замены mum/cat). Только пояснения, без команд.
 - **Расшифровка HRESULT** — частые коды (0x800f081f, 0x80073712, 0x8007000d, 0x80070003, 0x80071160, …) человеческим языком; декодирует и текст Inner Error из `\uXXXX`.
 - **Привязка к контексту** — показывает, какой инсталлер / пакет / KB / компонент падал.

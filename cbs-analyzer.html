@@ -116,10 +116,10 @@
   .kbrow.fail{border-left:4px solid var(--err)}
   .kbrow.okk{border-left:4px solid var(--ok)}
 
-  .cause{border:1px solid var(--line);border-left:5px solid var(--err);border-radius:0 4px 4px 0;background:#fbf9f3;padding:14px 18px;margin:10px 0}
+  .cause{border:1px solid var(--line);border-left:5px solid var(--err);border-radius:0 4px 4px 0;background:transparent;padding:14px 18px;margin:10px 0}
   .cause.store{border-left-color:var(--steel)}
   .cause h4{margin:0 0 4px;font-size:17px}
-  .cause .why{font-size:13px;color:#4a525e;margin:0 0 4px}
+  .cause > .why{font-size:13px;color:#4a525e;margin:0 0 4px}
   .cause .tag{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;background:var(--chip);border-radius:3px;padding:2px 7px;color:#6b7480}
   .group{border:1px solid var(--line);border-radius:4px;background:#fbf9f3;margin:6px 0;overflow:hidden}
   .group summary{cursor:pointer;list-style:none;padding:10px 14px;font-family:var(--mono);font-size:12px;display:flex;gap:10px;align-items:center}
@@ -220,6 +220,8 @@ const I18N = {
     ob_range:(a,b)=>`период: <b>${a}</b> → <b>${b}</b>`,
     ob_corr:(d,r)=>`повреждений: <b>${d}</b> / починено <b>${r}</b>`,
     ob_uniq:n=>`уникальных проблем: <b>${n}</b>`,
+    os_names:{win7:'Windows 7 / Server 2008 R2', win8:'Windows 8 / 8.1', win10:'Windows 10 / 11'},
+    ob_os:name=>`ОС: <b>${name}</b>`,
     cause_notstore:'не store — DISM не поможет', cause_store:'хранилище компонентов',
     cause_none:'Конкретных профилей причин не распознано — см. общие команды ниже.',
     st_lines:'строк', st_comps:'компонентов',
@@ -245,6 +247,12 @@ const I18N = {
       ['Если онлайн не помог — источник из ISO той же сборки/языка','DISM /Online /Cleanup-Image /RestoreHealth /Source:WIM:E:\\sources\\install.wim:1 /LimitAccess'],
       ['Проверка и починка системных файлов','sfc /scannow'],
     ],
+    cmds7:[
+      ['Проверка и починка системных файлов','sfc /scannow'],
+      ['System Update Readiness Tool (CheckSUR, KB947821) — на Win7 заменяет DISM /RestoreHealth, скачать с сайта Microsoft под свою разрядность','KB947821 (Windows6.1-KB947821-*.msu)'],
+      ['Посмотреть, что CheckSUR не смог починить','notepad %SYSTEMROOT%\\Logs\\CBS\\CheckSUR.persist.log'],
+      ['Если замена не найдена — подставить исправные mum/cat/файлы из дистрибутива Win7 SP1 той же версии и повторить sfc','sfc /scannow'],
+    ],
     ops:{ sfc:'sfc /scannow (System Repair)', dism:'DISM (обслуживание образа)', bg:'Фоновое обслуживание / установка обновлений', cbs:'Обслуживание компонентов (CBS)' },
     HR:{
       '0x800f081f':'Не найден источник восстановления (DISM не нашёл файлы). Нужен /Source из ISO той же сборки.',
@@ -266,6 +274,7 @@ const I18N = {
     sur_summary:(n,res)=>`Повреждённых пакетов: <b>${n}</b>${res?` · результат операции: <b>${res}</b>`:''}.`,
     sur_break:(parts)=>parts.join(' · '),
     sur_repfail:'замена mum/cat отсутствует',
+    sur_kb:kbs=>`Связанные обновления (возможно, переустановить после починки): <b>${kbs}</b>`,
     dism_none:'Запусков DISM в логе не найдено.',
     dism_attempt:(cmd,res,t)=>`<b>${cmd}</b> · ${res} · ${t}`,
     dism_ok:'успех', dism_fail:c=>`сбой ${c}`,
@@ -281,7 +290,8 @@ const I18N = {
       pending_reboot:{ label:'Ожидается перезагрузка',
         text:'Есть отложенные операции, требующие перезагрузки (pending.xml / poqexec). Часть обслуживания завершится только после рестарта.' },
       store_source_corrupt:{ label:'Источник восстановления в хранилище повреждён',
-        text:'Для части файлов эталон в самом хранилище компонентов (WinSxS) тоже повреждён — sfc /scannow чинить нечем, поэтому он показывает «починено 0». Нужен DISM /Online /Cleanup-Image /RestoreHealth (дотянет здоровые файлы из Windows Update), затем повторный sfc /scannow. Если онлайн не поможет — /Source из ISO ровно той же сборки.' },
+        text:'Для части файлов эталон в самом хранилище компонентов (WinSxS) тоже повреждён — sfc /scannow чинить нечем, поэтому он показывает «починено 0». Нужен DISM /Online /Cleanup-Image /RestoreHealth (дотянет здоровые файлы из Windows Update), затем повторный sfc /scannow. Если онлайн не поможет — /Source из ISO ровно той же сборки.',
+        text7:'Для части файлов эталон в самом хранилище компонентов (WinSxS) тоже повреждён — sfc /scannow чинить нечем, поэтому он показывает «починено 0». Это Windows 7 — DISM /RestoreHealth здесь нет; используйте System Update Readiness Tool (CheckSUR, KB947821), а если он не найдёт замену — подставьте исправные файлы из дистрибутива Win7 SP1 той же версии и повторите sfc /scannow.' },
       no_mumcat:{ label:'CheckSUR: нет замены mum/cat',
         text:'Повреждены манифесты пакетов (.mum/.cat), и у CBS нет локальной замены («Missing replacement mum/cat pair»). Онлайн-починка такие пакеты восстановить не может — нужен офлайн-источник (смонтированный ISO той же сборки) или ручная подстановка mum/cat из исправной системы той же версии. Чаще всего затронуты языковые/опциональные компоненты, не влияющие на работу системы.' },
     },
@@ -295,10 +305,15 @@ const I18N = {
              ['Перезагрузиться и повторить установку обновления','shutdown /r /t 0']] },
       store_corruption:{ label:'Повреждение хранилища компонентов',
         why:'CSI/CBS пометил хранилище повреждённым или не смог починить файл. Лечится восстановлением образа.',
+        why7:'CSI/CBS пометил хранилище повреждённым. Это Windows 7 — здесь нет DISM /RestoreHealth; используйте System Update Readiness Tool (CheckSUR, KB947821) и при необходимости ручную подстановку mum/cat/файлов из дистрибутива той же версии (SP1).',
         fix:[['Сканирование состояния хранилища','DISM /Online /Cleanup-Image /ScanHealth'],
              ['Восстановление через Windows Update','DISM /Online /Cleanup-Image /RestoreHealth'],
              ['Источник из ISO той же сборки/языка, если онлайн не помог','DISM /Online /Cleanup-Image /RestoreHealth /Source:WIM:E:\\sources\\install.wim:1 /LimitAccess'],
-             ['Проверка и починка системных файлов','sfc /scannow']] },
+             ['Проверка и починка системных файлов','sfc /scannow']],
+        fix7:[['Проверка и починка системных файлов','sfc /scannow'],
+              ['Запустить System Update Readiness Tool (KB947821) — скачать под свою разрядность с сайта Microsoft','%запуск загруженного MSU CheckSUR%'],
+              ['Посмотреть, что не удалось починить','notepad %SYSTEMROOT%\\Logs\\CBS\\CheckSUR.persist.log'],
+              ['Если CheckSUR не нашёл замену — подставить исправные mum/cat/файлы из дистрибутива Win7 SP1 той же версии и повторить']] },
       missing_source:{ label:'Не найден источник восстановления',
         why:'DISM не нашёл нужные файлы (0x800f081f). Нужен явный /Source из смонтированного ISO той же версии.',
         fix:[['Смонтировать ISO той же сборки и указать источник','DISM /Online /Cleanup-Image /RestoreHealth /Source:ESD:E:\\sources\\install.esd:1 /LimitAccess']] },
@@ -336,6 +351,8 @@ const I18N = {
     ob_range:(a,b)=>`range: <b>${a}</b> → <b>${b}</b>`,
     ob_corr:(d,r)=>`corruptions: <b>${d}</b> / repaired <b>${r}</b>`,
     ob_uniq:n=>`unique problems: <b>${n}</b>`,
+    os_names:{win7:'Windows 7 / Server 2008 R2', win8:'Windows 8 / 8.1', win10:'Windows 10 / 11'},
+    ob_os:name=>`OS: <b>${name}</b>`,
     cause_notstore:'not a store issue — DISM won’t help', cause_store:'component store',
     cause_none:'No specific cause profile recognized — see the general commands below.',
     st_lines:'lines', st_comps:'components',
@@ -361,6 +378,12 @@ const I18N = {
       ['If online fails — source from an ISO of the same build/language','DISM /Online /Cleanup-Image /RestoreHealth /Source:WIM:E:\\sources\\install.wim:1 /LimitAccess'],
       ['Check and repair system files','sfc /scannow'],
     ],
+    cmds7:[
+      ['Check and repair system files','sfc /scannow'],
+      ['System Update Readiness Tool (CheckSUR, KB947821) — on Win7 it replaces DISM /RestoreHealth; download for your architecture from Microsoft','KB947821 (Windows6.1-KB947821-*.msu)'],
+      ['See what CheckSUR could not repair','notepad %SYSTEMROOT%\\Logs\\CBS\\CheckSUR.persist.log'],
+      ['If no replacement was found — drop in healthy mum/cat/files from same-version Win7 SP1 media and run sfc again','sfc /scannow'],
+    ],
     ops:{ sfc:'sfc /scannow (System Repair)', dism:'DISM (image servicing)', bg:'Background servicing / update install', cbs:'Component servicing (CBS)' },
     HR:{
       '0x800f081f':'Repair source not found (DISM could not locate files). Needs /Source from an ISO of the same build.',
@@ -382,6 +405,7 @@ const I18N = {
     sur_summary:(n,res)=>`Corrupt packages: <b>${n}</b>${res?` · operation result: <b>${res}</b>`:''}.`,
     sur_break:(parts)=>parts.join(' · '),
     sur_repfail:'no mum/cat replacement available',
+    sur_kb:kbs=>`Related updates (consider reinstalling after repair): <b>${kbs}</b>`,
     dism_none:'No DISM runs found in the log.',
     dism_attempt:(cmd,res,t)=>`<b>${cmd}</b> · ${res} · ${t}`,
     dism_ok:'success', dism_fail:c=>`failed ${c}`,
@@ -397,7 +421,8 @@ const I18N = {
       pending_reboot:{ label:'Reboot pending',
         text:'There are deferred operations that require a restart (pending.xml / poqexec). Part of the servicing will only complete after a reboot.' },
       store_source_corrupt:{ label:'Repair source in the store is corrupt',
-        text:'For some files the reference copy in the component store (WinSxS) is corrupt too — sfc /scannow has nothing to repair from, which is why it reports "repaired 0". Run DISM /Online /Cleanup-Image /RestoreHealth (it pulls healthy files from Windows Update), then sfc /scannow again. If online fails, use /Source from an ISO of the exact same build.' },
+        text:'For some files the reference copy in the component store (WinSxS) is corrupt too — sfc /scannow has nothing to repair from, which is why it reports "repaired 0". Run DISM /Online /Cleanup-Image /RestoreHealth (it pulls healthy files from Windows Update), then sfc /scannow again. If online fails, use /Source from an ISO of the exact same build.',
+        text7:'For some files the reference copy in the component store (WinSxS) is corrupt too — sfc /scannow has nothing to repair from, which is why it reports "repaired 0". This is Windows 7 — there is no DISM /RestoreHealth here; use the System Update Readiness Tool (CheckSUR, KB947821), and if it finds no replacement, drop in healthy files from same-version Win7 SP1 media and run sfc /scannow again.' },
       no_mumcat:{ label:'CheckSUR: no mum/cat replacement',
         text:'Package manifests (.mum/.cat) are corrupt and CBS has no local replacement ("Missing replacement mum/cat pair"). Online repair cannot restore these packages — you need an offline source (a mounted ISO of the same build) or to manually drop in mum/cat files from a healthy machine of the same version. Usually the affected items are language/optional components that do not affect system operation.' },
     },
@@ -411,10 +436,15 @@ const I18N = {
              ['Reboot and retry the update','shutdown /r /t 0']] },
       store_corruption:{ label:'Component store corruption',
         why:'CSI/CBS marked the store corrupt or could not repair a file. Fixed by restoring the image.',
+        why7:'CSI/CBS marked the store corrupt. This is Windows 7 — there is no DISM /RestoreHealth here; use the System Update Readiness Tool (CheckSUR, KB947821) and, if needed, manually drop in mum/cat/files from the same-version (SP1) media.',
         fix:[['Scan the store health','DISM /Online /Cleanup-Image /ScanHealth'],
              ['Restore via Windows Update','DISM /Online /Cleanup-Image /RestoreHealth'],
              ['Source from an ISO of the same build/language if online fails','DISM /Online /Cleanup-Image /RestoreHealth /Source:WIM:E:\\sources\\install.wim:1 /LimitAccess'],
-             ['Check and repair system files','sfc /scannow']] },
+             ['Check and repair system files','sfc /scannow']],
+        fix7:[['Check and repair system files','sfc /scannow'],
+              ['Run the System Update Readiness Tool (KB947821) — download for your architecture from Microsoft','%run the downloaded CheckSUR MSU%'],
+              ['See what could not be repaired','notepad %SYSTEMROOT%\\Logs\\CBS\\CheckSUR.persist.log'],
+              ['If CheckSUR found no replacement — drop in healthy mum/cat/files from same-version Win7 SP1 media and retry']] },
       missing_source:{ label:'Repair source not found',
         why:'DISM could not find the required files (0x800f081f). An explicit /Source from a mounted ISO of the same version is needed.',
         fix:[['Mount an ISO of the same build and point to the source','DISM /Online /Cleanup-Image /RestoreHealth /Source:ESD:E:\\sources\\install.esd:1 /LimitAccess']] },
@@ -444,7 +474,7 @@ function applyStatic(){
 function setLang(l){
   LANG=l; T=I18N[l]; try{ localStorage.setItem('cbsLang',l); }catch(e){}
   applyStatic();
-  if(window._D){ window._D.op=detectOp(window._D._text); window._D.causes=runCauses(window._D._text); window._D.obs=runObs(window._D._text); window._D.dism=parseDism(window._D._text); window._D.sur=parseSUR(window._D._text); render(window._D); }
+  if(window._D){ window._D.op=detectOp(window._D._text); window._D.win=detectWin(window._D._text); window._D.causes=runCauses(window._D._text); window._D.obs=runObs(window._D._text); window._D.dism=parseDism(window._D._text); window._D.sur=parseSUR(window._D._text); render(window._D); }
 }
 $('#lng-ru').addEventListener('click',()=>setLang('ru'));
 $('#lng-en').addEventListener('click',()=>setLang('en'));
@@ -503,8 +533,12 @@ const CAUSE_TESTS = [
   {id:'dism_source_missing', test:t=>/0x80071160/i.test(t) && /DISM Package Manager|Cleanup-Image|RestoreHealth|ScanHealth/i.test(t), notStore:false},
 ];
 function runCauses(text){
+  const win=detectWin(text);
   return CAUSE_TESTS.filter(c=>c.test(text)).map(c=>{
-    const tr=T.causes[c.id]; return {id:c.id, notStore:c.notStore, label:tr.label, why:tr.why, fix:tr.fix};
+    const tr=T.causes[c.id];
+    const fix = (win==='win7' && tr.fix7) ? tr.fix7 : tr.fix;
+    const why = (win==='win7' && tr.why7) ? tr.why7 : tr.why;
+    return {id:c.id, notStore:c.notStore, label:tr.label, why, fix};
   });
 }
 
@@ -519,8 +553,11 @@ const OBS_TESTS = [
   {id:'no_mumcat', test:t=>/Missing replacement mum\/cat pair/i.test(t)},
 ];
 function runObs(text){
+  const win=detectWin(text);
   return OBS_TESTS.filter(o=>o.test(text)).map(o=>{
-    const tr=T.observations[o.id]; return {id:o.id, label:tr.label, text:tr.text};
+    const tr=T.observations[o.id];
+    const txt=(win==='win7' && tr.text7) ? tr.text7 : tr.text;
+    return {id:o.id, label:tr.label, text:txt};
   });
 }
 
@@ -567,13 +604,25 @@ function parseSUR(text){
     }
   }
   if(!summary.breakdown.length && curBreak.length) summary.breakdown=curBreak;
-  return {pkgs:[...seen.values()], summary};
+  const kbs=new Set();
+  for(const p of seen.values()){ const km=p.name.match(/KB(\d{6,7})/i); if(km) kbs.add('KB'+km[1]); }
+  return {pkgs:[...seen.values()], summary, kbs:[...kbs]};
 }
 function detectOp(text){
   if(/\[SR\]\s*Verify(?:ing)? complete|\[SR\]\s*Repairing|Verify and Repair transaction/i.test(text)) return T.ops.sfc;
   if(/DISM Package Manager Provider|Cleanup-Image|RestoreHealth|ScanHealth/i.test(text)) return T.ops.dism;
   if(/Startup Processing|TrustedInstaller.*idle|Reboot mark/i.test(text)) return T.ops.bg;
   return T.ops.cbs;
+}
+// определение версии Windows по сборке в логе → 'win7' | 'win8' | 'win10' | null
+function detectWin(text){
+  const m = text.match(/\b(6\.1\.7600|6\.1\.7601|6\.2\.9200|6\.3\.9600|10\.0\.\d{5})\b/);
+  if(!m) return null;
+  const b=m[1];
+  if(b.startsWith('6.1.')) return 'win7';
+  if(b==='6.2.9200') return 'win8';
+  if(b==='6.3.9600') return 'win8'; // 8.1 — те же инструменты, что и 8
+  return 'win10';
 }
 
 function analyze(text){
@@ -687,7 +736,7 @@ function analyze(text){
   const sur = parseSUR(text);
 
   window._D = {info,warn,err,issues,minor,comps,sessions,corr,files,kbs,
-               sigs, causes, obs, dism, sur, _text:text,
+               sigs, causes, obs, dism, sur, _text:text, win:detectWin(text),
                total:lines.length, op:detectOp(text), from:firstTime, to:lastTime};
   render(window._D);
 }
@@ -724,6 +773,7 @@ function render(d){
   // op bar
   const ob=$('#opbar'); ob.className='opbar show';
   ob.innerHTML = `<span class="pill">${esc(d.op)}</span>`+
+    (d.win?`<span>${T.ob_os(T.os_names[d.win])}</span>`:'')+
     (d.from?`<span>${T.ob_range(d.from,d.to)}</span>`:'')+
     (d.corr.detected!=null?`<span>${T.ob_corr(d.corr.detected,d.corr.repaired??0)}</span>`:'')+
     (d.sigs&&d.sigs.size?`<span>${T.ob_uniq([...d.sigs.values()].length)}</span>`:'');
@@ -765,7 +815,8 @@ function render(d){
     const s=d.sur.summary;
     const head=T.sur_summary(d.sur.pkgs.length, s.result?(s.result+(HR[s.result]?'':'' )):'');
     const brk=s.breakdown.length?`<div class="empty" style="margin:4px 0 8px">${T.sur_break(s.breakdown)}${s.detected!=null?` · detected ${s.detected} / repaired ${s.repaired??0}`:''}</div>`:'';
-    surw.innerHTML=`<div class="empty" style="margin-bottom:6px">${head}</div>${brk}`+
+    const kbline=(d.sur.kbs&&d.sur.kbs.length)?`<div class="empty" style="margin:4px 0 8px">${T.sur_kb(d.sur.kbs.join(', '))}</div>`:'';
+    surw.innerHTML=`<div class="empty" style="margin-bottom:6px">${head}</div>${brk}${kbline}`+
       d.sur.pkgs.slice(0,200).map(p=>
         `<div class="surrow"><span class="tp">${esc(p.type.replace(/^CBS /,''))}</span>${esc(p.name)}${p.note?`<span class="nt">${esc(p.note)}</span>`:''}</div>`).join('')+
       (d.sur.pkgs.length>200?`<div class="empty">…${d.sur.pkgs.length}</div>`:'');
@@ -814,7 +865,8 @@ function render(d){
   // fix commands
   show('#sec-cmd'); const cm=$('#cmd');
   if(critical){
-    cm.innerHTML = T.cmds.map(([why,c])=>
+    const cmds = (d.win==='win7' && T.cmds7) ? T.cmds7 : T.cmds;
+    cm.innerHTML = cmds.map(([why,c])=>
       `<div class="cmd"><span class="why">${why}</span>${esc(c)}<button class="copy" onclick="cp(this)">${T.copy}</button></div>`).join('');
   } else cm.innerHTML=`<div class="empty">${T.cmd_none}</div>`;
 
