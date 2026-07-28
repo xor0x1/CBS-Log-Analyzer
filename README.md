@@ -29,6 +29,7 @@ Drag a log onto the page and read top to bottom: **verdict → causes → comman
   - DISM online source missing (0x80071160) → /Source from ISO + /LimitAccess instead of retrying online
 - **dism.log support** — parses `dism.log` too (drop it alongside CBS): lists each DISM run (RestoreHealth / ScanHealth …), its time and final HRESULT, with a pass/fail summary so you can see what was already tried.
 - **CheckSUR / corrupt packages** — extracts the System Update Readiness block: each corrupt `.mum`/`.cat` package with its type (Catalog / MUM / Manifest) and report note, plus a summary with the corruption breakdown (Manifest / Metadata / Payload), operation result, and any related KB numbers pulled from the package names.
+- **Registry hive check** — drop a hive file (`COMPONENTS`, `SCHEMA.DAT`, `DRIVERS`, `SYSTEM`) and it reads the header to tell you whether the hive is clean, *dirty* (sequence counters out of sync — the usual cause of `ERROR_BADDB`, data normally intact) or structurally damaged. For a dirty hive it states exactly what needs correcting, with the actual counter value. Diagnostic only: the file is opened read-only and never modified.
 - **OS-aware advice** — detects the Windows version from the log build (7 / 8.x / 10–11) and adapts the suggested commands and observation texts accordingly: on Windows 7 it recommends the System Update Readiness Tool (CheckSUR, KB947821) and manual mum/cat replacement instead of `DISM /RestoreHealth`, which does not exist there.
 - **Observations** — a neutral block for third-party / informational moments (offline servicing against a missing drive, VSS shadow-copy activity, component cleanup / ResetBase, pending reboot, store source corrupt, missing mum/cat replacement). Explanations only, no commands.
 - **HRESULT decoding** — common codes (0x800f081f, 0x80073712, 0x8007000d, 0x80070003, 0x80071160, …) in plain language; also decodes `\uXXXX` Inner Error text.
@@ -41,7 +42,7 @@ Drag a log onto the page and read top to bottom: **verdict → causes → comman
 
 1. Download `cbs-analyzer.html`.
 2. Open it in any modern browser (no internet required).
-3. Drag your `CBS.log` onto the page — or click to choose a file. You can drop `CBS.log` and `dism.log` together for a combined analysis.
+3. Drag your `CBS.log` onto the page — or click to choose a file. You can drop `CBS.log` and `dism.log` together for a combined analysis, and registry hive files (`COMPONENTS`, `SCHEMA.DAT`, …) are recognised automatically and checked separately.
 4. Read the verdict, then the causes/observations, then the suggested commands.
 
 Logs are usually at `C:\Windows\Logs\CBS\CBS.log` and `C:\Windows\Logs\DISM\dism.log`.
@@ -81,6 +82,7 @@ New cause profiles and observations are easy to add: one entry in `CAUSE_TESTS` 
   - DISM: онлайн-источник недоступен (0x80071160) → /Source из ISO + /LimitAccess вместо повтора онлайн
 - **Поддержка dism.log** — разбирает и `dism.log` (кидайте его вместе с CBS): показывает каждый запуск DISM (RestoreHealth / ScanHealth …), время и итоговый HRESULT, со сводкой успех/сбой — видно, что уже пробовали.
 - **CheckSUR / повреждённые пакеты** — извлекает блок System Update Readiness: каждый повреждённый пакет `.mum`/`.cat` с типом (Catalog / MUM / Manifest) и причиной репорта, плюс сводка с разбивкой повреждений (Manifest / Metadata / Payload), результатом операции и связанными KB-номерами, извлечёнными из имён пакетов.
+- **Проверка кустов реестра** — перетащите файл куста (`COMPONENTS`, `SCHEMA.DAT`, `DRIVERS`, `SYSTEM`), и по заголовку будет определено, чистый он, *грязный* (рассинхрон служебных счётчиков — обычная причина `ERROR_BADDB`, данные при этом, как правило, целы) или структурно повреждён. Для грязного куста указывается, что именно нужно исправить, с конкретным значением счётчика. Только диагностика: файл открывается на чтение и никогда не изменяется.
 - **Учёт версии ОС** — определяет версию Windows по сборке из лога (7 / 8.x / 10–11) и подстраивает команды и тексты наблюдений: на Windows 7 рекомендует System Update Readiness Tool (CheckSUR, KB947821) и ручную подстановку mum/cat вместо `DISM /RestoreHealth`, которого там нет.
 - **Наблюдения** — нейтральный блок для сторонних / информационных моментов (offline-обслуживание по несуществующему диску, теневые копии VSS, очистка компонентов / ResetBase, ожидание перезагрузки, повреждённый источник в store, отсутствие замены mum/cat). Только пояснения, без команд.
 - **Расшифровка HRESULT** — частые коды (0x800f081f, 0x80073712, 0x8007000d, 0x80070003, 0x80071160, …) человеческим языком; декодирует и текст Inner Error из `\uXXXX`.
@@ -93,7 +95,7 @@ New cause profiles and observations are easy to add: one entry in `CAUSE_TESTS` 
 
 1. Скачайте `cbs-analyzer.html`.
 2. Откройте в любом современном браузере (интернет не нужен).
-3. Перетащите свой `CBS.log` на страницу — или нажмите, чтобы выбрать файл. Можно перетащить `CBS.log` и `dism.log` вместе — анализ объединится.
+3. Перетащите свой `CBS.log` на страницу — или нажмите, чтобы выбрать файл. Можно перетащить `CBS.log` и `dism.log` вместе — анализ объединится, а файлы кустов реестра (`COMPONENTS`, `SCHEMA.DAT`, …) распознаются автоматически и проверяются отдельно.
 4. Прочитайте вердикт, затем причины/наблюдения, затем предложенные команды.
 
 Логи обычно лежат в `C:\Windows\Logs\CBS\CBS.log` и `C:\Windows\Logs\DISM\dism.log`.
