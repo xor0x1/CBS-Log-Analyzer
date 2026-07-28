@@ -1,0 +1,31 @@
+# Логи Windows — содержат имена пользователей, пути и имена машин.
+# Никогда не коммитить чужие или свои тестовые логи.
+*.log
+*.LOG
+CBS*.log
+CbsPersist*
+dism.log
+DISM*.log
+CheckSUR*.log
+*.evtx
+
+# Архивы с логами
+*.zip
+*.7z
+*.rar
+*.cab
+
+# Системный мусор
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Редакторы
+.vscode/
+.idea/
+*.swp
+*~
+
+# Временное
+tmp/
+temp/
