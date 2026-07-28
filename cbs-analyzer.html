@@ -137,6 +137,16 @@
   .obs p{margin:0;font-size:13px;color:#46505c}
   .step{border-left:3px solid var(--steel);background:#eef3f7;border-radius:0 3px 3px 0;padding:9px 13px;margin:8px 0;font-size:13px;color:#3c4652}
 
+  .hive{border:1px solid var(--line);border-left:5px solid var(--ok);border-radius:0 4px 4px 0;background:#fbf9f3;padding:13px 18px;margin:9px 0}
+  .hive.dirty{border-left-color:var(--warn)}
+  .hive.broken{border-left-color:var(--err)}
+  .hive .hd{display:flex;gap:10px;align-items:center;font-family:var(--mono);font-size:13px;word-break:break-all}
+  .hive .badge2{font-size:10px;letter-spacing:.08em;padding:2px 8px;border-radius:3px;color:#fff;background:var(--ok);flex:0 0 auto}
+  .hive.dirty .badge2{background:var(--warn)}
+  .hive.broken .badge2{background:var(--err)}
+  .hive .meta{font-family:var(--mono);font-size:11px;color:#6b7480;margin-top:5px;word-break:break-all}
+  .hive .vd{margin:8px 0 0;font-size:13px;color:#46505c}
+
   .dismrow{border:1px solid var(--line);border-radius:4px;background:#fbf9f3;padding:10px 14px;margin:6px 0;font-family:var(--mono);font-size:12px;word-break:break-all}
   .dismrow.fail{border-left:4px solid var(--err)}
   .dismrow.okk{border-left:4px solid var(--ok)}
@@ -172,6 +182,7 @@
     <button class="tbtn" id="export" data-i18n="export"></button>
   </div>
 
+  <section id="sec-hive"><h3 data-i18n="h_hive"></h3><div id="hive"></div></section>
   <section id="sec-cause"><h3 data-i18n="h_cause"></h3><div id="cause"></div></section>
   <section id="sec-obs"><h3 data-i18n="h_obs"></h3><div id="obs"></div></section>
   <section id="sec-dism"><h3 data-i18n="h_dism"></h3><div id="dism"></div></section>
@@ -276,6 +287,18 @@ const I18N = {
       '0x800f0831':'CBS не нашёл нужный пакет в хранилище для применения обновления.'
     },
     h_obs:'Наблюдения (не ошибки целостности)',
+    h_hive:'Проверка кустов реестра',
+    hive_clean:'ЧИСТЫЙ', hive_dirty:'ГРЯЗНЫЙ', hive_broken:'СТРУКТУРА ПОВРЕЖДЕНА',
+    hive_seq:(p,s)=>`счётчики: primary ${p} / secondary ${s}`,
+    hive_csum_ok:'контрольная сумма заголовка сходится',
+    hive_csum_bad:'контрольная сумма заголовка НЕ сходится',
+    hive_trunc:'файл короче, чем заявлено в заголовке — вероятно, обрезан',
+    hive_verdict_clean:'Куст закрыт корректно. Признаков повреждения в заголовке нет.',
+    hive_verdict_dirty:'Куст не был корректно закрыт: служебные счётчики рассинхронизированы, поэтому Windows отказывается его загружать и выдаёт ERROR_BADDB. Заголовок цел, то есть данные, скорее всего, не разрушены — лечится приведением счётчиков в соответствие, а не заменой файла.',
+    hive_verdict_broken:'Заголовок куста не проходит проверку — файл повреждён или обрезан. Сброс счётчиков здесь не поможет, нужна замена на исправную копию.',
+    hive_note:'Проверяется только заголовок куста. Целый заголовок не гарантирует, что глубже в данных всё в порядке: при аварийной записи мог пострадать отдельный блок. Инструмент ничего не изменяет — файл открывается только на чтение.',
+    hive_todo:v=>`Что нужно исправить: выставить secondary равным primary (${v}) и пересчитать контрольную сумму заголовка.`,
+    hive_caution:'Это диагностический инструмент — он не правит кусты. Выполняйте исправление проверенными утилитами или заменой файла, обязательно сделав резервную копию. Куст заблокирован в работающей системе, поэтому замена делается из среды восстановления (WinRE), а оригинал переименовывается, а не удаляется. Учтите также, что рассинхрон счётчиков означает оборванную запись: рядом с кустом лежат журналы транзакций (.LOG1/.LOG2), и полноценное восстановление подразумевает их применение, а не только сброс счётчиков.',
     h_dism:'Запуски DISM',
     h_sur:'CheckSUR / повреждённые пакеты',
     sur_none:'Повреждённых пакетов (CheckSUR) не найдено.',
@@ -424,6 +447,18 @@ const I18N = {
       '0x800f0831':'CBS could not find the required package in the store to apply the update.'
     },
     h_obs:'Observations (not integrity errors)',
+    h_hive:'Registry hive check',
+    hive_clean:'CLEAN', hive_dirty:'DIRTY', hive_broken:'STRUCTURE DAMAGED',
+    hive_seq:(p,s)=>`sequence: primary ${p} / secondary ${s}`,
+    hive_csum_ok:'header checksum matches',
+    hive_csum_bad:'header checksum does NOT match',
+    hive_trunc:'file is shorter than the header claims — likely truncated',
+    hive_verdict_clean:'The hive was closed properly. No signs of damage in the header.',
+    hive_verdict_dirty:'The hive was not closed properly: its internal sequence counters are out of sync, which is why Windows refuses to load it and reports ERROR_BADDB. The header is intact, so the data itself is most likely fine — this is fixed by bringing the counters back in sync, not by replacing the file.',
+    hive_verdict_broken:'The hive header fails validation — the file is damaged or truncated. Resetting the counters will not help here; the file needs to be replaced with a healthy copy.',
+    hive_note:'Only the hive header is inspected. A valid header does not guarantee the data deeper inside is intact — an interrupted write may have damaged an individual block. This tool changes nothing; the file is opened read-only.',
+    hive_todo:v=>`What needs fixing: set secondary equal to primary (${v}) and recalculate the header checksum.`,
+    hive_caution:'This is a diagnostic tool — it does not repair hives. Perform the fix with proven utilities or by replacing the file, and always back up first. The hive is locked while Windows runs, so replacement is done from the Recovery Environment (WinRE), and the original should be renamed rather than deleted. Note also that a sequence mismatch means an interrupted write: transaction logs (.LOG1/.LOG2) sit next to the hive, and a proper recovery involves applying them, not just resetting the counters.',
     h_dism:'DISM runs',
     h_sur:'CheckSUR / corrupt packages',
     sur_none:'No corrupt packages (CheckSUR) found.',
@@ -511,6 +546,7 @@ function applyStatic(){
 function setLang(l){
   LANG=l; T=I18N[l]; try{ localStorage.setItem('cbsLang',l); }catch(e){}
   applyStatic();
+  if(window._H) renderHives(window._H);
   if(window._D){ window._D.op=detectOp(window._D._text); window._D.win=detectWin(window._D._text); window._D.causes=runCauses(window._D._text); window._D.obs=runObs(window._D._text); window._D.dism=parseDism(window._D._text); window._D.sur=parseSUR(window._D._text); render(window._D); }
 }
 $('#lng-ru').addEventListener('click',()=>setLang('ru'));
@@ -522,21 +558,91 @@ input.addEventListener('change', e=>{ if(e.target.files.length) read([...e.targe
 ['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('hover');}));
 drop.addEventListener('drop',e=>{ const f=[...e.dataTransfer.files]; if(f.length) read(f); });
 
+// разбор заголовка куста реестра (формат regf), только чтение
+function parseHiveHeader(buf, fileSize, fileName){
+  const dv=new DataView(buf);
+  if(buf.byteLength<512) return null;
+  const sig=String.fromCharCode(dv.getUint8(0),dv.getUint8(1),dv.getUint8(2),dv.getUint8(3));
+  if(sig!=='regf') return null;
+  const primary=dv.getUint32(4,true), secondary=dv.getUint32(8,true);
+  const major=dv.getUint32(20,true), minor=dv.getUint32(24,true);
+  const binsSize=dv.getUint32(40,true);
+  let name='';
+  for(let i=0;i<64;i+=2){ const c=dv.getUint16(48+i,true); if(!c) break; name+=String.fromCharCode(c); }
+  let csum=0;
+  for(let i=0;i<508;i+=4) csum^=dv.getUint32(i,true);
+  csum=csum>>>0;
+  if(csum===0) csum=1;
+  if(csum===0xFFFFFFFF) csum=0xFFFFFFFE;
+  const stored=dv.getUint32(508,true);
+  const csumOk = csum===stored;
+  const truncated = fileSize < binsSize+4096;
+  return { file:fileName, primary, secondary, dirty:primary!==secondary,
+           major, minor, binsSize, name, csumOk, truncated,
+           broken: !csumOk || truncated };
+}
+
 function read(files){
   drop.querySelector('.big').textContent = files.length>1 ? T.files_n(files.length) : files[0].name;
   const totMb = files.reduce((s,f)=>s+f.size,0)/1048576;
   drop.querySelector('.hint').textContent = totMb.toFixed(2)+' '+T.mb+' · '+T.reading;
-  let texts=[], done=0;
   const t0=Date.now();
-  files.forEach((f,i)=>{
+  const finish=()=>{ drop.querySelector('.hint').textContent = T.done(totMb.toFixed(2), ((Date.now()-t0)/1000).toFixed(1)); };
+
+  // определяем по сигнатуре, что это: куст реестра или текстовый лог
+  Promise.all(files.map(f=>new Promise(res=>{
     const r=new FileReader();
-    r.onload=()=>{ texts[i]=r.result; if(++done===files.length){
-      analyze(texts.join('\n'));
-      drop.querySelector('.hint').textContent = T.done(totMb.toFixed(2), ((Date.now()-t0)/1000).toFixed(1));
-    } };
-    r.onerror=()=>{ drop.querySelector('.hint').textContent = 'error reading file'; };
-    r.readAsText(f);
+    r.onload=()=>{ const b=new Uint8Array(r.result);
+      res({file:f, isHive: b[0]===0x72&&b[1]===0x65&&b[2]===0x67&&b[3]===0x66 }); };
+    r.onerror=()=>res({file:f, isHive:false});
+    r.readAsArrayBuffer(f.slice(0,4));
+  }))).then(marked=>{
+    const hives=marked.filter(m=>m.isHive).map(m=>m.file);
+    const logs =marked.filter(m=>!m.isHive).map(m=>m.file);
+    let pending=(hives.length?1:0)+(logs.length?1:0);
+    const step=()=>{ if(--pending<=0) finish(); };
+    if(!pending) finish();
+
+    if(hives.length){
+      const out=[]; let n=0;
+      hives.forEach(f=>{
+        const r=new FileReader();
+        r.onload=()=>{ const h=parseHiveHeader(r.result, f.size, f.name); if(h) out.push(h);
+          if(++n===hives.length){ window._H=out; renderHives(out); step(); } };
+        r.onerror=()=>{ if(++n===hives.length){ window._H=out; renderHives(out); step(); } };
+        r.readAsArrayBuffer(f.slice(0,4096));
+      });
+    }
+    if(logs.length){
+      const texts=[]; let n=0;
+      logs.forEach((f,i)=>{
+        const r=new FileReader();
+        r.onload=()=>{ texts[i]=r.result; if(++n===logs.length){ analyze(texts.join('\n')); step(); } };
+        r.onerror=()=>{ if(++n===logs.length){ analyze(texts.join('\n')); step(); } };
+        r.readAsText(f);
+      });
+    }
   });
+}
+
+function renderHives(list){
+  if(!list || !list.length) return;
+  show('#sec-hive');
+  const w=$('#hive');
+  w.innerHTML = list.map(h=>{
+    const state = h.broken ? T.hive_broken : (h.dirty ? T.hive_dirty : T.hive_clean);
+    const cls   = h.broken ? 'broken' : (h.dirty ? 'dirty' : 'clean');
+    const verdict = h.broken ? T.hive_verdict_broken : (h.dirty ? T.hive_verdict_dirty : T.hive_verdict_clean);
+    return `<div class="hive ${cls}">
+      <div class="hd"><span class="badge2">${state}</span><b>${esc(h.file)}</b></div>
+      <div class="meta">${T.hive_seq(h.primary,h.secondary)} · ${h.csumOk?T.hive_csum_ok:T.hive_csum_bad}${h.truncated?' · '+T.hive_trunc:''}</div>
+      ${h.name?`<div class="meta">${esc(h.name)}</div>`:''}
+      <p class="vd">${verdict}</p>
+      ${(h.dirty && !h.broken)?`<p class="vd"><b>${T.hive_todo(h.primary)}</b></p>`:''}
+    </div>`;
+  }).join('')
+    + (list.some(h=>h.dirty && !h.broken) ? `<div class="step">${T.hive_caution}</div>` : '')
+    + `<div class="empty" style="margin-top:10px">${T.hive_note}</div>`;
 }
 
 const RE_LINE = /^([\d-]{10})\s+([\d:.]+),\s+(Info|Warning|Error)\s+(\w+)\s+(.*)$/;
