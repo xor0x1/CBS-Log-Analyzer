@@ -7,7 +7,7 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ---
 
 ## [Unreleased]
-
+## [1.1.0] — 2026-07-28
 ### Added / Добавлено
 - **Registry hive check / Проверка кустов реестра** — hive files (`COMPONENTS`, `SCHEMA.DAT`, `DRIVERS`, `SYSTEM`) are recognised by their `regf` signature and checked via the header: clean, *dirty* (sequence counters out of sync — the usual cause of `ERROR_BADDB`, data normally intact) or structurally damaged. For a dirty hive the exact correction and counter value are stated. Diagnostic only — files are opened read-only and never modified; only the first 4 KB are read, so size does not matter. / Кусты распознаются по сигнатуре и проверяются по заголовку: чистый, грязный или структурно повреждённый; для грязного указывается конкретное значение счётчика. Только чтение, файл не изменяется.
 - **Registry hive corruption profile / Профиль «Повреждён куст реестра»** — recognizes `0x800703f1` / `ERROR_BADDB` / `0xc000014c` and the `MountSMISchemaHive` + `RegLoadKey failed [1009]` pattern, identifies which hive is affected (schema.dat / COMPONENTS / DRIVERS / SYSTEM) and substitutes its path into the diagnostic command. States plainly that DISM and sfc cannot work until the hive is repaired. / Распознаёт ERROR_BADDB и связанные сигнатуры, определяет конкретный куст и подставляет его путь; честно сообщает, что DISM и sfc бесполезны до восстановления куста.
