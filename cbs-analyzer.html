@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CBS Log Analyzer</title>
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="apple-touch-icon" href="icon-180.png">
 <style>
   :root{
     --ink:#10171f; --paper:#f3efe6; --line:#d8d0c0;
@@ -133,6 +135,7 @@
   .obs{border:1px solid var(--line);border-left:5px solid var(--steel);border-radius:0 4px 4px 0;background:#f4f7fa;padding:13px 18px;margin:9px 0}
   .obs h4{margin:0 0 3px;font-size:15px;color:var(--steel-d)}
   .obs p{margin:0;font-size:13px;color:#46505c}
+  .step{border-left:3px solid var(--steel);background:#eef3f7;border-radius:0 3px 3px 0;padding:9px 13px;margin:8px 0;font-size:13px;color:#3c4652}
 
   .dismrow{border:1px solid var(--line);border-radius:4px;background:#fbf9f3;padding:10px 14px;margin:6px 0;font-family:var(--mono);font-size:12px;word-break:break-all}
   .dismrow.fail{border-left:4px solid var(--err)}
@@ -210,6 +213,7 @@ const I18N = {
     footer:'Парсер эвристический: ориентируется на маркеры CSI/CBS (Error/Warning, store corruption, SR repair, session HRESULT). Итоговое решение по починке всегда за DISM/sfc.',
     credit:'© 2026 xor0x1 (Lunik) · MIT · ',
     files_n:n=>n+' файла', reading:'читаю…', mb:'МБ',
+    done:(mb,sec)=>`${mb} МБ · готово за ${sec} с — результаты ниже`,
     copy:'КОПИРОВАТЬ', copied:'СКОПИРОВАНО', exported:'✓ Скопировано',
     v_bad:'⚠ Найдены проблемы', v_ok:'✓ Лог чистый',
     v_bad_line:(u,i,c,f,k)=>`Уникальных проблем: <b>${u}</b> (значимых строк: ${i}) · компонентов: <b>${c}</b> · файлов: <b>${f}</b> · сбойных KB: <b>${k}</b>.`,
@@ -231,6 +235,7 @@ const I18N = {
     files_none:'Событий починки файлов не найдено.',
     kb_noerr:'без ошибок', kb_none:'Упоминаний обновлений не найдено.',
     cmd_none:'Починка не требуется.',
+    cmd_see_causes:'Причина определена — используйте целевые команды из раздела «Причины и целевая починка» выше. Универсальные команды здесь могут не подойти или навредить.',
     th_time:'Время', th_level:'Уровень', th_msg:'Сообщение',
     minor_none:'Незначительных событий нет.',
     sess_started:'Старт', sess_nofin:'— (не завершена в логе)', sess_none:'Сессий обслуживания не обнаружено.',
@@ -262,6 +267,9 @@ const I18N = {
       '0x80070002':'ERROR_FILE_NOT_FOUND — файл/ключ не найден (часто безобидно).',
       '0x80070003':'ERROR_PATH_NOT_FOUND — путь не найден (часто offline-обслуживание по несуществующему диску/образу).',
       '0x80071160':'CBS_E_SOURCE_MISSING — DISM не нашёл исправные файлы для починки (онлайн-источник недоступен/не отдаёт нужное). Нужен /Source из ISO той же сборки.',
+      '0x800703f1':'ERROR_BADDB — повреждён куст реестра (schema.dat / COMPONENTS / DRIVERS / SYSTEM). DISM и sfc не отработают, пока куст не восстановлен.',
+      '0x8007371c':'ERROR_SMI_PRIMITIVE_INSTALLER_FAILED — сбой SMI-инсталлера настроек; часто следствие повреждённого schema.dat.',
+      '0xc000014c':'STATUS_REGISTRY_CORRUPT — файл реестра повреждён или отсутствует; часто идёт вместе с ERROR_BADDB.',
       '0x800f0906':'CBS не смог скачать файлы источника (нет связи с WU/ограничена политика). Используйте /Source + /LimitAccess.',
       '0x8007000d':'ERROR_INVALID_DATA — некорректные данные (нередко косметика, напр. сбой таймера).',
       '0x80004005':'E_FAIL — общая ошибка; смотрите соседние строки для причины.',
@@ -327,6 +335,18 @@ const I18N = {
         fix:[['Смонтировать ISO той же сборки, указать источник и запретить WU','DISM /Online /Cleanup-Image /RestoreHealth /Source:WIM:X:\\sources\\install.wim:1 /LimitAccess'],
              ['Если в ISO образ в формате ESD','DISM /Online /Cleanup-Image /RestoreHealth /Source:ESD:X:\\sources\\install.esd:1 /LimitAccess'],
              ['После восстановления — повторная проверка','sfc /scannow']] },
+      hive_baddb:{ label:'Повреждён куст реестра (ERROR_BADDB)',
+        why:hive=>`CBS/CSI не может загрузить куст реестра ${hive} — ошибка 0x800703f1 (ERROR_BADDB). Пока куст не восстановлен, DISM и sfc бесполезны: хранилище компонентов просто не монтируется, поэтому 0x800f081f и подобные коды здесь лишь симптом. Обычно куст «грязный» (рассинхрон служебных счётчиков после аварийного выключения), реже разрушен; частые причины — сбой питания, нехватка места на системном диске, проблемы с памятью или накопителем.`,
+        fix:path=>[
+          ['ВАЖНО: сначала сделайте резервную копию реестра или полный образ системы — неудачная замена куста способна оставить систему незагружаемой'],
+          ['Проверьте накопитель: повреждение куста часто следствие проблем с диском','chkdsk /scan'],
+          ['Проверьте, грузится ли куст (имя временное). Ошибка при загрузке подтверждает повреждение',`reg load HKLM\\TMPHIVE ${path}`],
+          ['Обязательно выгрузите после проверки','reg unload HKLM\\TMPHIVE'],
+          ['Восстановление: «грязный» куст лечится исправлением рассинхрона служебных счётчиков специализированной утилитой, разрушенный — заменой на исправную копию той же сборки и разрядности. Оригинал переименуйте, а не удаляйте. В работающей системе файл заблокирован, поэтому замена выполняется из среды восстановления (WinRE); куст SYSTEM — только оттуда'],
+          ['После восстановления куста повторите проверку и установку обновления','sfc /scannow'],
+        ],
+        hives:{ schema:'C:\\Windows\\System32\\SMI\\Store\\Machine\\SCHEMA.DAT', components:'C:\\Windows\\System32\\config\\COMPONENTS', drivers:'C:\\Windows\\System32\\config\\DRIVERS', system:'C:\\Windows\\System32\\config\\SYSTEM' },
+        names:{ schema:'schema.dat (SMI Store)', components:'COMPONENTS', drivers:'DRIVERS', system:'SYSTEM' } },
     }
   },
   en:{
@@ -341,6 +361,7 @@ const I18N = {
     footer:'Heuristic parser: keys off CSI/CBS markers (Error/Warning, store corruption, SR repair, session HRESULT). The final repair decision always rests with DISM/sfc.',
     credit:'© 2026 xor0x1 (Lunik) · MIT · ',
     files_n:n=>n+' files', reading:'reading…', mb:'MB',
+    done:(mb,sec)=>`${mb} MB · done in ${sec}s — results below`,
     copy:'COPY', copied:'COPIED', exported:'✓ Copied',
     v_bad:'⚠ Problems found', v_ok:'✓ Clean log',
     v_bad_line:(u,i,c,f,k)=>`Unique problems: <b>${u}</b> (significant lines: ${i}) · components: <b>${c}</b> · files: <b>${f}</b> · failed KBs: <b>${k}</b>.`,
@@ -362,6 +383,7 @@ const I18N = {
     files_none:'No file-repair events found.',
     kb_noerr:'no errors', kb_none:'No update references found.',
     cmd_none:'No repair needed.',
+    cmd_see_causes:'A specific cause was identified — use the targeted commands in the “Causes & targeted fixes” section above. The generic commands here may not apply, or may do harm.',
     th_time:'Time', th_level:'Level', th_msg:'Message',
     minor_none:'No minor events.',
     sess_started:'Started', sess_nofin:'— (not completed in log)', sess_none:'No servicing sessions detected.',
@@ -393,6 +415,9 @@ const I18N = {
       '0x80070002':'ERROR_FILE_NOT_FOUND — file/key not found (often harmless).',
       '0x80070003':'ERROR_PATH_NOT_FOUND — path not found (often offline servicing against a missing drive/image).',
       '0x80071160':'CBS_E_SOURCE_MISSING — DISM could not find healthy files to repair from (online source unavailable/not serving them). Needs /Source from an ISO of the same build.',
+      '0x800703f1':'ERROR_BADDB — a registry hive is corrupt (schema.dat / COMPONENTS / DRIVERS / SYSTEM). DISM and sfc cannot work until the hive is repaired.',
+      '0x8007371c':'ERROR_SMI_PRIMITIVE_INSTALLER_FAILED — the SMI settings installer failed; often a consequence of a corrupt schema.dat.',
+      '0xc000014c':'STATUS_REGISTRY_CORRUPT — a registry file is corrupt or missing; often accompanies ERROR_BADDB.',
       '0x800f0906':'CBS could not download source files (no WU connectivity / policy-restricted). Use /Source + /LimitAccess.',
       '0x8007000d':'ERROR_INVALID_DATA — invalid data (often cosmetic, e.g. a timer glitch).',
       '0x80004005':'E_FAIL — generic error; check nearby lines for the cause.',
@@ -458,6 +483,18 @@ const I18N = {
         fix:[['Mount an ISO of the same build, point to the source and block WU','DISM /Online /Cleanup-Image /RestoreHealth /Source:WIM:X:\\sources\\install.wim:1 /LimitAccess'],
              ['If the ISO ships an ESD image','DISM /Online /Cleanup-Image /RestoreHealth /Source:ESD:X:\\sources\\install.esd:1 /LimitAccess'],
              ['After repair — re-check','sfc /scannow']] },
+      hive_baddb:{ label:'Corrupt registry hive (ERROR_BADDB)',
+        why:hive=>`CBS/CSI cannot load the ${hive} registry hive — error 0x800703f1 (ERROR_BADDB). Until the hive is repaired, DISM and sfc are useless: the component store simply will not mount, so 0x800f081f and similar codes are only a symptom here. Usually the hive is "dirty" (mismatched internal sequence counters after an unclean shutdown) rather than destroyed; common causes are power loss, low free space on the system drive, or memory/storage faults.`,
+        fix:path=>[
+          ['IMPORTANT: back up the registry or take a full system image first — a failed hive replacement can leave the system unbootable'],
+          ['Check the drive: hive corruption is often a consequence of storage problems','chkdsk /scan'],
+          ['Test whether the hive loads (the name is temporary). An error here confirms corruption',`reg load HKLM\\TMPHIVE ${path}`],
+          ['Always unload it after the test','reg unload HKLM\\TMPHIVE'],
+          ['Repair: a "dirty" hive is fixed by correcting the mismatched sequence counters with a dedicated utility; a destroyed one is replaced with a healthy copy of the same build and architecture. Rename the original rather than deleting it. The file is locked while Windows runs, so replacement is done from the Recovery Environment (WinRE); the SYSTEM hive can only be replaced there'],
+          ['After the hive is restored, re-check and retry the update','sfc /scannow'],
+        ],
+        hives:{ schema:'C:\\Windows\\System32\\SMI\\Store\\Machine\\SCHEMA.DAT', components:'C:\\Windows\\System32\\config\\COMPONENTS', drivers:'C:\\Windows\\System32\\config\\DRIVERS', system:'C:\\Windows\\System32\\config\\SYSTEM' },
+        names:{ schema:'schema.dat (SMI Store)', components:'COMPONENTS', drivers:'DRIVERS', system:'SYSTEM' } },
     }
   }
 };
@@ -490,9 +527,14 @@ function read(files){
   const totMb = files.reduce((s,f)=>s+f.size,0)/1048576;
   drop.querySelector('.hint').textContent = totMb.toFixed(2)+' '+T.mb+' · '+T.reading;
   let texts=[], done=0;
+  const t0=Date.now();
   files.forEach((f,i)=>{
     const r=new FileReader();
-    r.onload=()=>{ texts[i]=r.result; if(++done===files.length) analyze(texts.join('\n')); };
+    r.onload=()=>{ texts[i]=r.result; if(++done===files.length){
+      analyze(texts.join('\n'));
+      drop.querySelector('.hint').textContent = T.done(totMb.toFixed(2), ((Date.now()-t0)/1000).toFixed(1));
+    } };
+    r.onerror=()=>{ drop.querySelector('.hint').textContent = 'error reading file'; };
     r.readAsText(f);
   });
 }
@@ -505,7 +547,7 @@ const HR = new Proxy({}, { get:(_,k)=>T.HR[k] });
 
 // «шумные» ошибки, не влияющие на целостность
 function isNoise(msg){
-  return /Current tick count lower than last tick count/i.test(msg)
+  return /Current tick count.*lower than last tick count/i.test(msg)
       || /deltastore\.cpp.*STATUS_INVALID_PARAMETER/i.test(msg)
       || /Failed to (?:internally )?open package|Failed to clear CorruptionDetectedDuringAcr/i.test(msg);
 }
@@ -531,13 +573,25 @@ const CAUSE_TESTS = [
   {id:'missing_source', test:t=>/0x800f081f|CBS_E_SOURCE_MISSING|cannot find the source files/i.test(t), notStore:false},
   {id:'update_install_fail', test:t=>/0x80073712|0x800f0922|0x80073701|ERROR_SXS_ASSEMBLY_MISSING/i.test(t), notStore:false},
   {id:'dism_source_missing', test:t=>/0x80071160/i.test(t) && /DISM Package Manager|Cleanup-Image|RestoreHealth|ScanHealth/i.test(t), notStore:false},
+  {id:'hive_baddb', test:t=>/0x800703f1|ERROR_BADDB|0xc000014c/i.test(t) || (/MountSMISchemaHive|RegLoadKey failed/i.test(t) && /\b1009\b/.test(t)), notStore:true},
 ];
+// какой именно куст повреждён
+function detectHive(text){
+  if(/MountSMISchemaHive|SMI\\Store\\Machine|schema\.dat/i.test(text)) return 'schema';
+  if(/COMPONENTS hive|config\\COMPONENTS|HKLM\\COMPONENTS/i.test(text)) return 'components';
+  if(/DRIVERS hive|staging driver updates/i.test(text)) return 'drivers';
+  if(/SYSTEM hive|config\\system/i.test(text)) return 'system';
+  return 'components';
+}
 function runCauses(text){
   const win=detectWin(text);
+  const hive=detectHive(text);
   return CAUSE_TESTS.filter(c=>c.test(text)).map(c=>{
     const tr=T.causes[c.id];
-    const fix = (win==='win7' && tr.fix7) ? tr.fix7 : tr.fix;
-    const why = (win==='win7' && tr.why7) ? tr.why7 : tr.why;
+    let fix = (win==='win7' && tr.fix7) ? tr.fix7 : tr.fix;
+    let why = (win==='win7' && tr.why7) ? tr.why7 : tr.why;
+    if(typeof why==='function') why = why(tr.names ? tr.names[hive] : '');
+    if(typeof fix==='function') fix = fix(tr.hives ? tr.hives[hive] : '');
     return {id:c.id, notStore:c.notStore, label:tr.label, why, fix};
   });
 }
@@ -786,7 +840,9 @@ function render(d){
         <span class="tag">${c.notStore?T.cause_notstore:T.cause_store}</span>
         <h4>${esc(c.label)}</h4>
         <p class="why">${esc(c.why)}</p>
-        ${c.fix.map(([why,cmd])=>`<div class="cmd"><span class="why">${esc(why)}</span>${esc(cmd)}<button class="copy" onclick="cp(this)">${T.copy}</button></div>`).join('')}
+        ${c.fix.map(([why,cmd])=>cmd
+          ? `<div class="cmd"><span class="why">${esc(why)}</span>${esc(cmd)}<button class="copy" onclick="cp(this)">${T.copy}</button></div>`
+          : `<div class="step">${esc(why)}</div>`).join('')}
       </div>`).join('');
   } else ca.innerHTML=`<div class="empty">${T.cause_none}</div>`;
 
@@ -864,11 +920,15 @@ function render(d){
 
   // fix commands
   show('#sec-cmd'); const cm=$('#cmd');
-  if(critical){
+  if(!critical){
+    cm.innerHTML=`<div class="empty">${T.cmd_none}</div>`;
+  } else if(d.causes && d.causes.length){
+    cm.innerHTML=`<div class="step">${T.cmd_see_causes}</div>`;
+  } else {
     const cmds = (d.win==='win7' && T.cmds7) ? T.cmds7 : T.cmds;
     cm.innerHTML = cmds.map(([why,c])=>
       `<div class="cmd"><span class="why">${why}</span>${esc(c)}<button class="copy" onclick="cp(this)">${T.copy}</button></div>`).join('');
-  } else cm.innerHTML=`<div class="empty">${T.cmd_none}</div>`;
+  }
 
   // errors table (filterable)
   show('#sec-err'); $('#filterbar').style.display = d.issues.length?'flex':'none';
