@@ -112,6 +112,11 @@ New cause profiles and observations are easy to add: one entry in `CAUSE_TESTS` 
 
 ---
 
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for the version history. /
+История изменений — в [CHANGELOG.md](CHANGELOG.md).
+
 ## Author / Автор
 
 **xor0x1 (aka Lunik)** — [github.com/xor0x1](https://github.com/xor0x1)
